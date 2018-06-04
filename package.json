@@ -10,10 +10,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "googleapis": "^31.0.2"
+    "googleapis": "^31.0.2",
+    "lambda-helpers" : "hirenj/lambda-helpers"
   },
   "bundledDependencies": [
-    "googleapis"
+    "googleapis",
+    "lambda-helpers"
   ],
   "devDependencies": {
     "pack-lambda": "^1.0.0"

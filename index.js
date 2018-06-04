@@ -1,8 +1,8 @@
 'use strict';
 /*jshint esversion: 6, node:true */
 
-var download_queue = 'DownloadQueue';
-var bucket_name = 'gator';
+let download_queue = 'DownloadQueue';
+let bucket_name = 'gator';
 
 let config = {};
 
@@ -17,19 +17,35 @@ if (config.region) {
   require('lambda-helpers').AWS.setRegion(config.region);
 }
 
-var Queue = require('lambda-helpers').queue;
-var google = require('./google');
+const Queue = require('lambda-helpers').queue;
+const google = require('./google');
 const Events = require('lambda-helpers').events;
 
 google.setRootBucket(bucket_name);
 
-var download_changed_files = function(page_token) {
+const download_changed_files = function(page_token) {
   return google.getChangedFiles(page_token);
 };
 
-var update_page_token = function(page_token,arn) {
-  console.log("Writing page token ",page_token);
-  return ;
+const update_page_token = function(page_token) {
+  const AWS = require('lambda-helpers').AWS;
+  const s3 = new AWS.S3();
+  var params = {
+    Bucket: bucket_name,
+    Key: 'config/page_token'
+  };
+  return s3.putObject(params).promise();
+};
+
+const get_page_token = function() {
+  const AWS = require('lambda-helpers').AWS;
+  const s3 = new AWS.S3();
+  var params = {
+    Bucket: bucket_name,
+    Key: 'config/page_token'
+  };
+  // OR return 'none' for starting from scratch
+  return s3.getObject(params).promise();
 };
 
 exports.googleWebhook = function acceptWebhook(event,context) {
@@ -37,27 +53,15 @@ exports.googleWebhook = function acceptWebhook(event,context) {
   // START STEP FUNCTION TO DOWNLOAD FILES
 };
 
-// Permissions: Roles downloadQueueSource / keyDecrypter
-//   - KMS decrypt
-//   - SQS sendMessage
-
-// Needs permission to run from cloudwatch event
 exports.queueDownloads = function queueDownloads(event,context) {
 
-  var group = event.groupid;
-  var token = event.page_token;
-
-  if ( ! group && ! token ) {
-    context.succeed('Done');
-    return;
-  }
-
-  var queue = new Queue(download_queue);
+  let queue = new Queue(download_queue);
   var download_promise = Promise.resolve(true);
 
-  download_promise = download_changed_files(token).then(function(fileinfos) {
-    // Write fileinfos.token to config/page_token
-    return fileinfos.files;
+  download_promise = get_page_token()
+  .then( token => download_changed_files(token) )
+  .then(function(fileinfos) {
+    return update_page_token(fileinfos.token).then( () => fileinfos.files );
   });
 
   // Push all the shared files into the queue
@@ -78,12 +82,6 @@ exports.queueDownloads = function queueDownloads(event,context) {
     context.succeed('Done');
   });
 };
-
-// Every minute
-// Permissions: Roles keyDecrypter / downloadQueueConsumer
-//   - SNS publish
-//   - KMS decrypt
-//   - SQS readMessage changeMessageVisbility
 
 exports.downloadFiles = function downloadFiles(event,context) {
   console.log("Lambda downloadFiles execution");
