@@ -1,6 +1,25 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Google drive webhook consumer",
   "Parameters" : {
+    "GOOGLEAPIKEY": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Default": "",
+      "Description": "API Key for Google auth"
+    },
+    "GOOGLEAPISECRET": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Default": "",
+      "Description": "API secret for Google auth"
+    },
+    "GOOGLEREFRESHTOKEN": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Default": "",
+      "Description": "Refresh Token for Google auth for user"
+    }
   },
   "Resources": {
     "DownloadQueue" : {
@@ -84,9 +103,22 @@
         "Description" : "downloadFiles",
         "Handler" : "index.downloadFiles",
         "Role" : {"Fn::GetAtt" : ["LambdaDownloadFilesRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
+        "Environment": {
+          "Variables": {
+            "GOOGLE_API_SECRET": {
+              "Ref": "GOOGLEAPISECRET"
+            },
+            "GOOGLE_API_KEY": {
+              "Ref": "GOOGLEAPIKEY"
+            },
+            "GOOGLE_REFRESH_TOKEN": {
+              "Ref": "GOOGLEREFRESHTOKEN"
+            }
+          }
+        },
+        "Runtime" : "nodejs6.10",
         "MemorySize" : 128,
-        "Timeout" : 20
+        "Timeout" : 500
       },
       "DependsOn" : "LambdaDownloadFilesRole"
     },
@@ -103,7 +135,7 @@
         "Description" : "subscribeWebhook",
         "Handler" : "index.subscribeWebhook",
         "Role" : {"Fn::GetAtt" : ["LambdaSubscribeWebhookRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
+        "Runtime" : "nodejs6.10",
         "MemorySize" : 128,
         "Timeout" : 20
       },
@@ -263,6 +295,177 @@
                   }
               ]
             }
+        }]
+      }
+    },
+
+    "GoogleWebhookLambda": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": { "Fn::Join": ["\n", [
+            "'use strict';",
+            "",
+            "exports.googleWebhook = (event, context, callback) => {",
+            "  console.log('Event:', JSON.stringify(event));",
+            "  const response = {};",
+            "  callback(null, response);",
+            "};"
+          ]]}
+        },
+        "Description": "Google drive webhook consumer",
+        "Handler": "index.googleWebhook",
+        "Role": { "Fn::GetAtt": ["GoogleWebhookLambdaRole", "Arn"]},
+        "Environment": {
+          "Variables": {
+            "GOOGLE_API_SECRET": {
+              "Ref": "GOOGLEAPISECRET"
+            },
+            "GOOGLE_API_KEY": {
+              "Ref": "GOOGLEAPIKEY"
+            },
+            "GOOGLE_REFRESH_TOKEN": {
+              "Ref": "GOOGLEREFRESHTOKEN"
+            }
+          }
+        },
+        "Runtime": "nodejs6.10"
+      }
+    },
+
+    "GoogleWebhookLambdaRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": { "Service": ["lambda.amazonaws.com"] },
+            "Action": ["sts:AssumeRole"]
+          }]
+        },
+        "ManagedPolicyArns": ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole", {"Ref" : "WriteDownloadQueue"} ]
+      }
+    },
+
+    "WebhookApi": {
+      "Type": "AWS::ApiGateway::RestApi",
+      "Properties": {
+        "Name": "Google drive Webhook API",
+        "Description": "Google drive webhook API",
+        "FailOnWarnings": true
+      }
+    },
+
+    "LambdaPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:invokeFunction",
+        "FunctionName": {"Fn::GetAtt": ["GoogleWebhookLambda", "Arn"]},
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {"Fn::Join": ["", ["arn:aws:execute-api:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "WebhookApi"}, "/*"]]}
+      }
+    },
+
+    "ApiGatewayCloudWatchLogsRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": { "Service": ["apigateway.amazonaws.com"] },
+            "Action": ["sts:AssumeRole"]
+          }]
+        },
+        "Policies": [{
+          "PolicyName": "ApiGatewayLogsPolicy",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:PutLogEvents",
+                "logs:GetLogEvents",
+                "logs:FilterLogEvents"
+              ],
+              "Resource": "*"
+            }]
+          }
+        }]
+      }
+    },
+
+    "ApiGatewayAccount": {
+      "Type": "AWS::ApiGateway::Account",
+      "Properties": {
+        "CloudWatchRoleArn": {"Fn::GetAtt": ["ApiGatewayCloudWatchLogsRole", "Arn"] }
+      }
+    },
+
+    "WebhookApiStage": {
+      "DependsOn": ["ApiGatewayAccount"],
+      "Type": "AWS::ApiGateway::Stage",
+      "Properties": {
+        "DeploymentId": {"Ref": "ApiDeployment"},
+        "MethodSettings": [{
+          "DataTraceEnabled": true,
+          "HttpMethod": "*",
+          "LoggingLevel": "INFO",
+          "ResourcePath": "/*"
+        }],
+        "RestApiId": {"Ref": "WebhookApi"},
+        "StageName": "LATEST",
+        "Variables": {
+        }
+      }
+    },
+
+    "ApiDeployment": {
+      "Type": "AWS::ApiGateway::Deployment",
+      "DependsOn": ["GoogleRequestALL"],
+      "Properties": {
+        "RestApiId": {"Ref": "WebhookApi"},
+        "StageName": "DummyStage"
+      }
+    },
+
+    "WebhookResource": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "RestApiId": {"Ref": "WebhookApi"},
+        "ParentId": {"Fn::GetAtt": ["WebhookApi", "RootResourceId"]},
+        "PathPart": "google"
+      }
+    },
+
+    "GoogleRequestALL": {
+      "DependsOn": "LambdaPermission",
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "AuthorizationType": "NONE",
+        "HttpMethod": "ANY",
+        "Integration": {
+          "Type": "AWS_PROXY",
+          "IntegrationHttpMethod": "POST",
+          "Uri": {"Fn::Join": ["",
+            ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["GoogleWebhookLambda", "Arn"]}, "/invocations"]
+          ]},
+          "IntegrationResponses": [{
+            "StatusCode": 200,
+            "ResponseTemplates": {}
+          }],
+          "PassthroughBehavior": "WHEN_NO_MATCH"
+        },
+        "RequestParameters": {},
+        "ResourceId": {"Ref": "WebhookResource"},
+        "RestApiId": {"Ref": "WebhookApi"},
+        "MethodResponses": [{
+          "StatusCode": 200
         }]
       }
     }
