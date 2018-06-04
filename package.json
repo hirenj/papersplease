@@ -1,0 +1,21 @@
+{
+  "name": "papersplease",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "package": "pack-lambda --exclude-version --exclude-scope",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "googleapis": "^31.0.2"
+  },
+  "bundledDependencies": [
+    "googleapis"
+  ],
+  "devDependencies": {
+    "pack-lambda": "^1.0.0"
+  }
+}
