@@ -47,37 +47,6 @@ var google_register_hook = function(auth,hook_url) {
   });
 };
 
-var google_remove_hook = function(auth,hook_data) {
-  var service = google.drive('v3');
-
-  return new Promise(function(resolve,reject) {
-    service.channels.stop({'auth' : auth, 
-      resource: {
-        kind: hook_data.kind,
-        id: hook_data.id,
-        resourceId: hook_data.resourceId,
-        resourceUri: hook_data.resourceUri,
-        type: 'web_hook',
-        address: hook_data.address
-      }},function(err,result) {
-        if (err) {
-          console.log("Got an error");
-          console.log(err);
-          console.log(err.code);
-          if (err.code == 404) {
-            console.log("Channel already removed at ",hook_data.id);
-            resolve(true);
-            return;
-          }
-          reject(err);
-          return;
-        }
-        console.log("Successfully removed channel at ",hook_data.id);
-        resolve(true);
-      });
-    });
-};
-
 var google_get_file_if_needed = function(auth,file) {
   return google_get_file_if_needed_s3(auth,file);
 }
@@ -229,13 +198,6 @@ var registerHook = function registerHook(hook_url) {
   });
 };
 
-var removeHook = function removeHook(hook_data) {
-  var scopes = ["https://www.googleapis.com/auth/drive.readonly"];
-  return getServiceAuth(scopes).then(function(auth) {
-    return google_remove_hook(auth,hook_data);
-  });
-};
-
 var downloadFileIfNecessary = function downloadFileIfNecessary(file) {
   var scopes = ["https://www.googleapis.com/auth/drive.readonly"];
   if (file.auth_token && file.auth_token.access_token) {
@@ -268,7 +230,6 @@ exports.setRootBucket = function(bucket) {
   bucket_name = bucket;
 };
 exports.registerHook = registerHook;
-exports.removeHook = removeHook;
 exports.downloadFileIfNecessary = downloadFileIfNecessary;
 exports.getFiles = getFiles;
 exports.getChangedFiles = getChangedFiles;

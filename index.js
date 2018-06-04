@@ -126,13 +126,13 @@ exports.downloadFiles = function downloadFiles(event,context) {
   }).catch(function(err) {
     if (err.message === 'No messages') {
       console.log("No messages");
-      context.succeed({messages: 0});
+      context.succeed({messageCount: 0});
     } else {
       console.error(err);
       console.error(err.stack);
     }
   }).then(function() {
-    context.succeed({ messages: 1 });
+    context.succeed({ messageCount: 1 });
   });
 };
 
