@@ -7,17 +7,6 @@
     }
   },
   "Resources": {
-    "DownloadTopic": {
-      "Type" : "AWS::SNS::Topic",
-      "Properties" : {
-        "DisplayName" : "Files to download from Google drive",
-        "TopicName" : { "Fn::Join" :  [ "-", [ { "Ref" : "AWS::StackName" }, "download" ] ] },
-        "Subscription" : [{
-          "Endpoint" : { "Fn::GetAtt" : [ "downloadFile" , "Arn" ] },
-          "Protocol" : "lambda"
-        }]
-      }
-    },
     "DownloadQueue" : {
       "Type": "AWS::SQS::Queue",
       "Properties": {
@@ -43,38 +32,16 @@
               }
             ]
         },
-        "Roles" : [ { "Ref" : "LambdaPopulateGroupGrantsRole" },
-                    { "Ref" : "LambdaAcceptWebhookRole"},
+        "Roles" : [ { "Ref" : "LambdaAcceptWebhookRole"},
                     { "Ref" : "LambdaDownloadFilesRole" },
-                    { "Ref" : "LambdaDownloadFileRole" },
-                    { "Ref" : "LambdaDownloadEverythingRole" },
                     { "Ref" : "LambdaSubscribeWebhookRole" }]
       },
-      "DependsOn" : ["LambdaPopulateGroupGrantsRole","LambdaDownloadFilesRole","LambdaDownloadFileRole","LambdaDownloadEverythingRole","LambdaAcceptWebhookRole"]
-    },
-    "LambdaPopulateGroupGrantsRole": {
-      "Type": "AWS::IAM::Role",
-      "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "DecryptKeys" }, {"Ref" : "WriteGrants"}, {"Ref" : "RegisterEvents"}],
-        "AssumeRolePolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Principal": {
-                "Service": "lambda.amazonaws.com"
-              },
-              "Action": "sts:AssumeRole"
-            }
-          ]
-        }
-      },
-      "DependsOn" : [ "WriteGrants", "DecryptKeys" ]
+      "DependsOn" : ["LambdaSubscribeWebhookRole","LambdaDownloadFilesRole","LambdaAcceptWebhookRole"]
     },
     "LambdaDownloadFilesRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "DecryptKeys" }, {"Ref" : "ConsumeDownloadQueue"}, {"Ref" : "WriteDownloadTopic"},{"Ref" : "RegisterEvents"},{"Ref" : "UpdateDataTableCapacity" }],
+        "ManagedPolicyArns" : [ {"Ref" : "ConsumeDownloadQueue"},{ "Ref" : "ReadWriteConfRole" } ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -88,50 +55,12 @@
           ]
         }
       },
-      "DependsOn" : [ "ConsumeDownloadQueue", "WriteDownloadTopic", "DecryptKeys" ]
-    },
-    "LambdaDownloadFileRole": {
-      "Type": "AWS::IAM::Role",
-      "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "ConsumeDownloadQueue" }, {"Ref" : "UploadsSource"}],
-        "AssumeRolePolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Principal": {
-                "Service": "lambda.amazonaws.com"
-              },
-              "Action": "sts:AssumeRole"
-            }
-          ]
-        }
-      },
-      "DependsOn" : [ "ConsumeDownloadQueue", "UploadsSource" ]
-    },
-    "LambdaDownloadEverythingRole": {
-      "Type": "AWS::IAM::Role",
-      "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "DecryptKeys" }, {"Ref" : "WriteDownloadQueue"}, {"Ref" : "RegisterEvents"}, {"Ref" : "ReadValidGroups"}, {"Ref" : "ReadWriteUploads"},{"Ref" : "UpdateDataTableCapacity" }],
-        "AssumeRolePolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Principal": {
-                "Service": "lambda.amazonaws.com"
-              },
-              "Action": "sts:AssumeRole"
-            }
-          ]
-        }
-      },
-      "DependsOn" : [ "DecryptKeys", "WriteDownloadQueue" ]
+      "DependsOn" : [ "ConsumeDownloadQueue" ]
     },
     "LambdaSubscribeWebhookRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "DecryptKeys" }, {"Ref" : "RegisterEvents"} ],
+        "ManagedPolicyArns" : [ { "Ref" : "ReadWriteConfRole" } ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -150,7 +79,7 @@
     "LambdaAcceptWebhookRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ {"Ref" : "RegisterEvents"} ],
+        "ManagedPolicyArns" : [ {"Ref" : "ReadWriteConfRole"},{"Ref" : "WriteDownloadQueue"} ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -163,46 +92,7 @@
             }
           ]
         }
-      },
-      "DependsOn" : []
-    },
-    "populateGroupGrants" : {
-      "Type" : "AWS::Lambda::Function",
-      "Properties" : {
-        "Code" : {
-          "ZipFile": { "Fn::Join": ["", [
-            "exports.exchangetoken = function(event, context) {",
-            "  context.succeed('OK');",
-            "};"
-          ]]}
-        },
-        "Description" : "populateGroupGrants",
-        "Handler" : "index.populateGroupGrants",
-        "Role" : {"Fn::GetAtt" : ["LambdaPopulateGroupGrantsRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
-        "MemorySize" : 128,
-        "Timeout" : 20
-      },
-      "DependsOn" : "LambdaPopulateGroupGrantsRole"
-    },
-    "downloadFile" : {
-      "Type" : "AWS::Lambda::Function",
-      "Properties" : {
-        "Code" : {
-          "ZipFile": { "Fn::Join": ["", [
-            "exports.downloadFile = function(event, context) {",
-            "  context.succeed('OK');",
-            "};"
-          ]]}
-        },
-        "Description" : "downloadFile",
-        "Handler" : "index.downloadFile",
-        "Role" : {"Fn::GetAtt" : ["LambdaDownloadFileRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
-        "MemorySize" : 128,
-        "Timeout" : 20
-      },
-      "DependsOn" : "LambdaDownloadFileRole"
+      }
     },
     "downloadFiles" : {
       "Type" : "AWS::Lambda::Function",
@@ -222,25 +112,6 @@
         "Timeout" : 20
       },
       "DependsOn" : "LambdaDownloadFilesRole"
-    },
-    "downloadEverything" : {
-      "Type" : "AWS::Lambda::Function",
-      "Properties" : {
-        "Code" : {
-          "ZipFile": { "Fn::Join": ["", [
-            "exports.downloadEverything = function(event, context) {",
-            "  context.succeed('OK');",
-            "};"
-          ]]}
-        },
-        "Description" : "downloadEverything",
-        "Handler" : "index.downloadEverything",
-        "Role" : {"Fn::GetAtt" : ["LambdaDownloadEverythingRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
-        "MemorySize" : 128,
-        "Timeout" : 300
-      },
-      "DependsOn" : "LambdaDownloadEverythingRole"
     },
     "subscribeWebhook" : {
       "Type" : "AWS::Lambda::Function",
@@ -280,109 +151,6 @@
       },
       "DependsOn" : "LambdaAcceptWebhookRole"
     },
-    "authSecrets" : {
-      "Type" : "AWS::KMS::Key",
-      "Properties" : {
-        "Description" : {"Fn::Join" : [ "", [ "Secrets key for ", {"Ref" : "AWS::StackName"} ] ] },
-        "KeyPolicy" : {
-          "Version": "2012-10-17",
-          "Id": "key-default-1",
-          "Statement": [
-          {
-            "Sid": "Allow administration of the key",
-            "Effect": "Allow",
-            "Principal": {"AWS" : { "Fn::Join" :  [ "", [ "arn:aws:iam:",":", { "Ref" : "AWS::AccountId" } ,":root" ] ]} },
-            "Action": [
-              "kms:*"
-            ],
-            "Resource": "*"
-          },
-          {
-            "Sid": "Allow use of the key",
-            "Effect": "Allow",
-            "Principal": { "AWS": [
-                              {"Fn::GetAtt" : [ "LambdaPopulateGroupGrantsRole" , "Arn" ]},
-                              {"Fn::GetAtt" : [ "LambdaDownloadFileRole" , "Arn" ]},
-                              {"Fn::GetAtt" : [ "LambdaDownloadFilesRole" , "Arn" ]},
-                              {"Fn::GetAtt" : [ "LambdaDownloadEverythingRole" , "Arn" ]},
-                              {"Fn::GetAtt" : [ "LambdaSubscribeWebhookRole","Arn" ]}
-                          ] },
-            "Action": [
-              "kms:Encrypt",
-              "kms:Decrypt",
-              "kms:ReEncrypt",
-              "kms:GenerateDataKey*",
-              "kms:DescribeKey"
-            ],
-            "Resource": "*"
-          },
-          {
-            "Sid": "Allow attachment of persistent resources",
-            "Effect": "Allow",
-            "Principal": { "AWS": [
-                              {"Fn::GetAtt" : [ "LambdaPopulateGroupGrantsRole" , "Arn" ]},
-                              {"Fn::GetAtt" : [ "LambdaDownloadFileRole" , "Arn" ]},
-                              {"Fn::GetAtt" : [ "LambdaDownloadFilesRole" , "Arn" ]},
-                              {"Fn::GetAtt" : [ "LambdaDownloadEverythingRole" , "Arn" ]},
-                              {"Fn::GetAtt" : [ "LambdaSubscribeWebhookRole","Arn" ]}
-                          ] },
-            "Action": [
-              "kms:CreateGrant",
-              "kms:ListGrants",
-              "kms:RevokeGrant"
-            ],
-            "Resource": "*",
-            "Condition" : {
-              "Bool" : { "kms:GrantIsForAWSResource" : "true" }
-            }
-          }
-          ]
-        }
-      }
-    },
-    "DecryptKeys": {
-      "Type": "AWS::IAM::ManagedPolicy",
-      "Properties" : {
-        "Description" : "DecryptKeys",
-        "PolicyDocument" : {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                  "Sid": "DecryptKeys",
-                  "Effect": "Allow",
-                  "Action": "kms:Decrypt",
-                  "Resource" : { "Fn::Join" :  [ "", [ "arn:aws:kms:", { "Ref" : "AWS::Region" }, ":", { "Ref" : "AWS::AccountId" } ,":", "*" ] ]}
-                },
-                {
-                  "Sid": "ReadEncryptedData",
-                  "Effect": "Allow",
-                  "Action": [
-                      "s3:GetObject"
-                  ],
-                  "Resource": { "Fn::Join" :  [ "", [ "arn:aws:s3:", ":" ,":", { "Ref" : "dataBucket" }, "/conf/creds.kms.json.encrypted" ] ]}
-                }
-
-            ]
-        }
-      }
-    },
-    "RegisterEvents": {
-      "Type": "AWS::IAM::ManagedPolicy",
-      "Properties" : {
-        "Description" : "RegisterEvents",
-        "PolicyDocument" : {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                  "Sid": "RegisterEvents",
-                  "Effect": "Allow",
-                  "Action": [ "events:PutRule", "events:ListRules", "events:PutTargets" ],
-                  "Resource" : "*"
-                }
-            ]
-        }
-      }
-    },
     "WriteDownloadQueue": {
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties" : {
@@ -420,46 +188,6 @@
       },
       "DependsOn": "DownloadQueue"
     },
-    "WriteDownloadTopic": {
-      "Type": "AWS::IAM::ManagedPolicy",
-      "Properties" : {
-        "Description" : "WriteDownloadTopic",
-        "PolicyDocument" : {
-            "Id" : "WriteDownloadTopic",
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                  "Sid": "WriteDownloadTopicSNS",
-                  "Effect": "Allow",
-                  "Action": "sns:Publish",
-                  "Resource" : { "Ref" : "DownloadTopic" }
-                }                
-            ]
-        }
-      },
-      "DependsOn": "DownloadTopic"
-    },
-    "UploadsSource" : {
-      "Type": "AWS::IAM::ManagedPolicy",
-      "Properties" : {
-        "Description" : "UploadsSource",
-        "PolicyDocument" : {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Action": [
-                "s3:GetObject",
-                "s3:PutObject"
-              ],
-              "Resource": [
-                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-gator/uploads/*" ] ] }
-              ]
-            }
-          ]
-        }
-      }
-    },
     "ReadWriteUploads" : {
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties" : {
@@ -490,62 +218,6 @@
         }
       }
     },
-    "ReadValidGroups" : {
-      "Type": "AWS::IAM::ManagedPolicy",
-      "Properties" : {
-        "Description" : "ReadValidGroups",
-        "PolicyDocument" : {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Sid": "ReadGrantsConfig",
-              "Effect": "Allow",
-              "Action": [
-                  "s3:GetObject"
-              ],
-              "Resource": { "Fn::Join" :  [ "", [ "arn:aws:s3:", ":" ,":", { "Ref" : "dataBucket" }, "/conf/groupids" ] ]}
-            }
-
-          ]
-        }
-      }
-    },
-    "UpdateDataTableCapacity": {
-      "Type": "AWS::IAM::ManagedPolicy",
-      "Properties" : {
-        "Description" : "Update capacity for writing to data table",
-        "PolicyDocument" : {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Action": [
-                  "dynamodb:UpdateTable"
-              ],
-              "Resource": { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":", { "Ref" : "AWS::AccountId" } ,":table/", { "Ref" : "data" } ] ]}
-            }
-          ]
-        }
-      }
-    },
-    "LambdaPopulateGroupGrantsPermission": {
-      "Type": "AWS::Lambda::Permission",
-      "Properties": {
-        "FunctionName" : { "Fn::GetAtt" : ["populateGroupGrants", "Arn"] },
-        "Action": "lambda:InvokeFunction",
-        "Principal": "events.amazonaws.com",
-        "SourceArn" : {"Fn::Join": [":", [ "arn:aws:events", { "Ref" : "AWS::Region" } , {"Ref" : "AWS::AccountId" }, "rule/PopulateGroupGrants"]] }
-      }
-    },
-    "LambdaDownloadFileInvokePermission": {
-      "Type": "AWS::Lambda::Permission",
-      "Properties": {
-        "FunctionName" : { "Fn::GetAtt" : ["downloadFile", "Arn"] },
-        "Action": "lambda:InvokeFunction",
-        "Principal": "sns.amazonaws.com",
-        "SourceArn": { "Ref" : "DownloadTopic" }
-      }
-    },
     "LambdaSubscribeWebhookInvokePermission": {
       "Type": "AWS::Lambda::Permission",
       "Properties": {
@@ -556,30 +228,6 @@
       },
       "Metadata" : {
         "Comment" : "Used to maintain a subscription to the webhook. Manages its own events"
-      }
-    },
-    "LambdaDownloadEverythingInvokePermission": {
-      "Type": "AWS::Lambda::Permission",
-      "Properties": {
-        "FunctionName" : { "Fn::GetAtt" : ["downloadEverything", "Arn"] },
-        "Action": "lambda:InvokeFunction",
-        "Principal": "events.amazonaws.com",
-        "SourceArn" : {"Fn::Join": [":", [ "arn:aws:events", { "Ref" : "AWS::Region" } , {"Ref" : "AWS::AccountId" }, "rule/GoogleDownloadFiles"]] }
-      },
-      "Metadata" : {
-        "Comment" : "Invoked some minutes after last acceptWebhook call. acceptWebhook manages events"
-      }
-    },
-    "LambdaDownloadFilesInvokePermission": {
-      "Type": "AWS::Lambda::Permission",
-      "Properties": {
-        "FunctionName" : { "Fn::GetAtt" : ["downloadFiles", "Arn"] },
-        "Action": "lambda:InvokeFunction",
-        "Principal": "events.amazonaws.com",
-        "SourceArn" : {"Fn::Join": [":", [ "arn:aws:events", { "Ref" : "AWS::Region" } , {"Ref" : "AWS::AccountId" }, "rule/DownloadFilesDaemon"]] }
-      },
-      "Metadata" : {
-        "Comment" : "Invoked at a fixed time rate, controlled by itself and downloadEverything"
       }
     },
     "dataApiHook" : {
