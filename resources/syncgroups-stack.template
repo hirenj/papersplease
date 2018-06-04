@@ -22,6 +22,22 @@
     }
   },
   "Resources": {
+    "dataBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::StackName"
+              },
+              "-papers"
+            ]
+          ]
+        },
+      }
+    },
     "DownloadQueue" : {
       "Type": "AWS::SQS::Queue",
       "Properties": {
@@ -50,12 +66,12 @@
         "Roles" : [ { "Ref" : "LambdaDownloadFilesRole" },
                     { "Ref" : "LambdaSubscribeWebhookRole" }]
       },
-      "DependsOn" : ["LambdaSubscribeWebhookRole","LambdaDownloadFilesRole","LambdaAcceptWebhookRole"]
+      "DependsOn" : ["LambdaSubscribeWebhookRole","LambdaDownloadFilesRole","GoogleWebhookLambdaRole"]
     },
     "LambdaDownloadFilesRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ {"Ref" : "ConsumeDownloadQueue"},{ "Ref" : "ReadWriteConfRole" } ],
+        "ManagedPolicyArns" : [ {"Ref" : "ConsumeDownloadQueue"},{ "Ref" : "ReadWriteConf" } ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -74,7 +90,7 @@
     "LambdaSubscribeWebhookRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "ReadWriteConfRole" } ],
+        "ManagedPolicyArns" : [ { "Ref" : "ReadWriteConf" } ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -118,7 +134,7 @@
         },
         "Runtime" : "nodejs6.10",
         "MemorySize" : 128,
-        "Timeout" : 500
+        "Timeout" : 300
       },
       "DependsOn" : "LambdaDownloadFilesRole"
     },
@@ -188,10 +204,11 @@
             {
               "Effect": "Allow",
               "Action": [
+                "s3:PutObject",
                 "s3:DeleteObject"
               ],
               "Resource": [
-                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-gator/uploads/*" ] ] }
+                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers/uploads/*" ] ] }
               ]
             },
             {
@@ -200,9 +217,40 @@
                 "s3:ListBucket"
               ],
               "Resource": [
-                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-gator" ] ] }
+                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] }
               ],
               "Condition": {"StringLike":{"s3:prefix":["uploads/*"]}}
+            }
+          ]
+        }
+      }
+    },
+    "ReadWriteConf" : {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties" : {
+        "Description" : "ReadWriteConf",
+        "PolicyDocument" : {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:PutObject",
+                "s3:DeleteObject"
+              ],
+              "Resource": [
+                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers/conf/*" ] ] }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:ListBucket"
+              ],
+              "Resource": [
+                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] }
+              ],
+              "Condition": {"StringLike":{"s3:prefix":["conf/*"]}}
             }
           ]
         }
@@ -236,7 +284,7 @@
                  "            \"Choices\" : [ ",
                  "                { \"Variable\": \"$.messageCount\", \"NumericGreaterThan\": 0, \"Next\": \"downloadFiles\" }",
                  "                          ],",
-                 "            \"Default\" : \"END\"",
+                 "            \"Default\" : \"Finished\"",
                  "        },",
                  "        \"downloadFiles\" : {",
                  "            \"Type\" : \"Task\", ",
@@ -244,7 +292,7 @@
                  "            \"Next\" : \"QueueChoice\",",
                  "            \"Catch\": [ {",
                  "               \"ErrorEquals\": [\"States.ALL\"],",
-                 "               \"Next\": \"END\"",
+                 "               \"Next\": \"Finished\"",
                  "            } ],",
                  "            \"Retry\" : [",
                  "              {",
@@ -256,6 +304,9 @@
                  "                \"MaxAttempts\": 1",
                  "              }",
                  "            ]",
+                 "        },",
+                 "        \"Finished\": {",
+                 "            \"Type\": \"Succeed\"",
                  "        }",
                  "    }",
                  "}"
@@ -471,9 +522,5 @@
     }
   },
   "Outputs": {
-    "DownloadTopicName": {
-      "Description": "Download SNS topic",
-      "Value": { "Fn::GetAtt" : ["DownloadTopic","TopicName"]}
-    }
   }
 }
