@@ -24,7 +24,7 @@ const Events = require('lambda-helpers').events;
 google.setRootBucket(bucket_name);
 
 var download_changed_files = function(page_token) {
-  return google.getChangedFiles(page_token).then(check_accepted_groups);
+  return google.getChangedFiles(page_token);
 };
 
 var update_page_token = function(page_token,arn) {
