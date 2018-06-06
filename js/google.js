@@ -220,8 +220,6 @@ exports.setRootBucket = function(bucket) {
   bucket_name = bucket;
 };
 
-downloadFileIfNecessary({id: "1p2dVJLeiH0Ec6uMIn3oOieBW_30DAda6", md5: "" });
-
 exports.registerHook = registerHook;
 exports.downloadFileIfNecessary = downloadFileIfNecessary;
 exports.getChangedFiles = getChangedFiles;
