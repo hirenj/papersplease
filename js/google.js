@@ -8,6 +8,98 @@ const {PassThrough} = require('stream');
 
 var bucket_name = 'test-gator';
 
+const PDF_ROOT = '0B9D1j47bHtStdDdiZnJhRXVvSWc';
+
+let get_folders_in = function(parent='root',pageToken) {
+  const service = google.drive('v3');
+  return service.files.list({
+    q: `'${parent}' in parents and mimeType = 'application/vnd.google-apps.folder'`,
+    fields: 'nextPageToken, files(id, name)',
+    spaces: 'drive',
+    pageToken: pageToken
+  }).then( resp => {
+    let result = resp.data;
+    if (result.nextPageToken) {
+      return get_folders_in(parent,result.nextPageToken).then( dat => result.files.concat( dat ) );
+    }
+    return result.files;
+  });
+};
+
+let create_folder = function(parent='root',foldername) {
+  const service = google.drive('v3');
+  let meta = {
+    'name': foldername,
+    'parents': [parent],
+    'mimeType': 'application/vnd.google-apps.folder'
+  };
+  return service.files.create({ resource: meta, fields: 'id' }).then( resp => {
+    return resp.data.id;
+  });
+};
+
+let get_existing_tags = () => {
+  return get_folders_in(PDF_ROOT).then( folders => {
+    return folders;
+  });
+};
+
+let ensure_tagset = (tags) => {
+  return get_existing_tags().then( existing_tags => {
+    let existing = existing_tags.map( tag => tag.name.toLowerCase() );
+    return Promise.all( tags.map( tag => {
+      let lc_tag = tag.toLowerCase();
+      if (existing.indexOf(lc_tag) >= 0) {
+        return Promise.resolve(existing_tags [ existing.indexOf( lc_tag ) ]);
+      }
+      return create_folder(PDF_ROOT,tag).then( id => {
+        return { id: id, name: tag };
+      });
+    }));
+  });
+};
+
+let get_tags_for_file = (fileId) => {
+  const service = google.drive('v3');
+  return service.files.get({
+    fileId: fileId,
+    fields: 'parents'
+  }).then( resp => {
+    return resp.data.parents;
+  }).then( parents => {
+    return get_existing_tags().then( tags => {
+      let ids = tags.map( t => t.id );
+      return parents.map( par => tags[ ids.indexOf( par ) ]).filter( t => t );
+    });
+  });
+};
+
+let set_tags_for_file = (fileId,tags,empty=['inbox']) => {
+  const service = google.drive('v3');
+
+  if (tags.length == 0) {
+    tags = [].concat(empty);
+  }
+  return get_tags_for_file(fileId).then( current_tags => {
+    console.log('Current tags are',current_tags);
+    return ensure_tagset(tags).then( all_tags => {
+      console.log('available tags are',all_tags);
+      let curr_ids = current_tags.map( t => t.id );
+      let wanted_tags = all_tags.map( t => t.id );
+      let to_add = wanted_tags.filter( t => curr_ids.indexOf(t) < 0 ).join(',');
+      let to_remove = curr_ids.filter( t => wanted_tags.indexOf(t) < 0 ).join(',');
+      if (to_add === '' && to_remove === '') {
+        return Promise.resolve();
+      }
+      return service.files.update({
+        fileId: fileId,
+        addParents: to_add,
+        removeParents: to_remove
+      });
+    });
+  });
+};
+
 var get_start_token = function() {
   var service = google.drive('v3');
   return new Promise(function(resolve,reject) {
@@ -156,7 +248,7 @@ const get_changed_files = (page_token,files) => {
   return new Promise(function(resolve,reject) {
     service.changes.list({
       pageToken: page_token,
-      fields: 'newStartPageToken, nextPageToken, changes(fileId, file/id, file/name, file/md5Checksum)'
+      fields: 'newStartPageToken, nextPageToken, changes(fileId, file/id, file/name, file/md5Checksum, file/parents)'
     },function(err,resp) {
       if (err) {
         reject(err);
@@ -167,7 +259,7 @@ const get_changed_files = (page_token,files) => {
         return { id: file.fileId, removed: file.removed, name : file.file.name, md5Checksum: file.file.md5Checksum };
       })));
       var current_files = result.changes.filter(function(file) {
-        return ! file.removed && (file.file.name || '').match(/\.pdf$/);
+        return ! file.removed && (file.file.name || '').match(/\.pdf$/) && file.parents.indexOf(PDF_ROOT) >= 0;
       }).map(function(file) {
         return file.file;
       });
@@ -199,6 +291,10 @@ var downloadFileIfNecessary = function downloadFileIfNecessary(file) {
   return getServiceAuth().then( () => get_file_if_needed(file) );
 };
 
+var setTagsForFileId = function setTagsForFileId(fileId,tags) {
+  return getServiceAuth().then( () => set_tags_for_file(fileId,tags) );
+};
+
 var getServiceAuth = function getServiceAuth() {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_API_KEY,
@@ -223,4 +319,5 @@ exports.setRootBucket = function(bucket) {
 exports.registerHook = registerHook;
 exports.downloadFileIfNecessary = downloadFileIfNecessary;
 exports.getChangedFiles = getChangedFiles;
+exports.setTagsForFileId = setTagsForFileId;
 exports.getServiceAuth = getServiceAuth;

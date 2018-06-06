@@ -90,6 +90,18 @@ exports.queueDownloads = function queueDownloads(event,context) {
   });
 };
 
+exports.setTags = function(event,context) {
+  let filename = event.key;
+  let fileId = filename.replace(/.*google\-/,'');
+  let tags = (event.extracted.stamps || []).map( stamp => stamp.text );
+  console.log('Setting tags for ',fileId,tags);
+  google.setTagsForFileId( fileId, tags ).then( () => {
+    context.succeed(event);
+  }).catch( err => {
+    context.fail(err.message);
+  });
+};
+
 exports.downloadFiles = function downloadFiles(event,context) {
   console.log("Lambda downloadFiles execution");
 
