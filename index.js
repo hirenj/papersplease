@@ -181,8 +181,10 @@ exports.downloadFiles = function downloadFiles(event,context) {
 };
 
 exports.subscribeWebhook = function(event,context) {
-  google.registerHook(HOST_URL+'/google').then( res => {
-    context.succeed({'status' : 'OK'});
-  })
-  .catch( err => context.fail(err.message));
+  get_page_token().then( token => {
+    google.registerHook(HOST_URL+'/google',token.page_token).then( res => {
+      context.succeed({'status' : 'OK'});
+    })
+    .catch( err => context.fail(err.message));
+  });
 };

@@ -302,7 +302,16 @@
         "Environment": {
           "Variables": {
             "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
-            "HOST_URL" : {"Ref" : "HOSTURL"}
+            "HOST_URL" : {"Ref" : "HOSTURL"},
+            "GOOGLE_API_SECRET": {
+              "Ref": "GOOGLEAPISECRET"
+            },
+            "GOOGLE_API_KEY": {
+              "Ref": "GOOGLEAPIKEY"
+            },
+            "GOOGLE_REFRESH_TOKEN": {
+              "Ref": "GOOGLEREFRESHTOKEN"
+            }
           }
         },
         "MemorySize" : 128,
