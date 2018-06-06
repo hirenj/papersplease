@@ -24,6 +24,11 @@
       "Type": "String",
       "Default": "",
       "Description": "Valid users"
+    },
+    "HOSTURL" : {
+      "Type": "String",
+      "Default": "https://papersplease-api.glycocode.com/api",
+      "Description": "HOSTNAME base for api"      
     }
   },
   "Resources": {
@@ -296,7 +301,8 @@
         "Runtime" : "nodejs6.10",
         "Environment": {
           "Variables": {
-            "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] }
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "HOST_URL" : {"Ref" : "HOSTURL"}
           }
         },
         "MemorySize" : 128,

@@ -148,10 +148,11 @@ var request_hook = function(hook_url,token) {
   });
 };
 
-var register_hook = function(hook_url) {
-  return get_start_token().then(function(startPageToken) {
-    return request_hook(hook_url,startPageToken);
-  });
+var register_hook = function(hook_url,token) {
+  if (token === 'none') {
+    return get_start_token().then( tok => register_hook(hook_url,tok.page_token) );
+  }
+  return request_hook(hook_url,token);
 };
 
 var get_file_if_needed = function(file) {
@@ -330,8 +331,8 @@ var getChangedFiles = function getChangedFiles(page_token) {
   .then( () => get_changed_files(page_token) );
 };
 
-var registerHook = function registerHook(hook_url) {
-  return getServiceAuth().then( () => register_hook(hook_url) );
+var registerHook = function registerHook(hook_url,token) {
+  return getServiceAuth().then( () => register_hook(hook_url,token) );
 };
 
 var downloadFileIfNecessary = function downloadFileIfNecessary(file) {

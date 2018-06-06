@@ -16,6 +16,7 @@ if (process.env.DOWNLOAD_QUEUE_MACHINE) {
 if (process.env.BUCKET_NAME) {
   bucket_name = process.env.BUCKET_NAME;
 }
+const HOST_URL = (process.env.PUBLIC_HOST || '');
 
 if (config.region) {
   require('lambda-helpers').AWS.setRegion(config.region);
@@ -86,7 +87,7 @@ exports.googleWebhook = function acceptWebhook(event,context) {
     exports.queueDownloads({},{ succeed: resolve });
   })
   .then( () => runDownloader())
-  .then( () => context.succeed('OK'))
+  .then( () => context.succeed({ 'status': 'OK' }))
   .catch( err => context.fail(err) );
 };
 
@@ -180,13 +181,8 @@ exports.downloadFiles = function downloadFiles(event,context) {
 };
 
 exports.subscribeWebhook = function(event,context) {
-  console.log(event);
-
-  if ( ! event.base_url) {
-    console.log("No base url, returning");
-    context.succeed('Done');
-    return;
-  }
-
-  return google.registerHook(event.base_url+'/hook');
+  google.registerHook(HOST_URL+'/google').then( res => {
+    context.succeed({'status' : 'OK'});
+  })
+  .catch( err => context.fail(err.message));
 };
