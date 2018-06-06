@@ -1,8 +1,8 @@
 'use strict';
 /*jshint esversion: 6, node:true */
 
-let download_queue = 'DownloadQueue';
-let bucket_name = 'gator';
+let download_queue = 'https://sqs.us-east-1.amazonaws.com/978536629153/papersplease-DownloadQueue';
+let bucket_name = 'papersplease-papers';
 
 let config = {};
 
@@ -18,7 +18,7 @@ if (config.region) {
 }
 
 const Queue = require('lambda-helpers').queue;
-const google = require('./google');
+const google = require('./js/google');
 const Events = require('lambda-helpers').events;
 
 google.setRootBucket(bucket_name);
@@ -32,8 +32,10 @@ const update_page_token = function(page_token) {
   const s3 = new AWS.S3();
   var params = {
     Bucket: bucket_name,
-    Key: 'config/page_token'
+    Key: 'config/page_token',
+    Body: JSON.stringify({page_token: page_token})
   };
+  console.log(params);
   return s3.putObject(params).promise();
 };
 
@@ -47,8 +49,8 @@ const get_page_token = function() {
   return s3.getObject(params).promise().then( data => {
     return JSON.parse(data.Body.toString());
   }).catch( err => {
-    console.log(err);
-    return { token: 'none' };
+    console.log('Did not get page token',err.message,err.statusCode);
+    return { page_token: 'none' };
   });
 };
 
@@ -63,8 +65,8 @@ exports.queueDownloads = function queueDownloads(event,context) {
   var download_promise = Promise.resolve(true);
 
   download_promise = get_page_token()
-  .then( token => download_changed_files(token.token) )
-  .then(function(fileinfos) {
+  .then( token => download_changed_files(token.page_token) )
+  .then((fileinfos) => {
     return update_page_token(fileinfos.token).then( () => fileinfos.files );
   });
 
@@ -76,7 +78,8 @@ exports.queueDownloads = function queueDownloads(event,context) {
       return Promise.resolve(false);
     }
     console.log("Queueing files for download");
-    return Promise.all(files.map(function(file) {
+    return Promise.all(files.map((file) => {
+      console.log('Message',{'id' : file.id, 'name' : file.name, 'md5' : file.md5Checksum });
       return queue.sendMessage({'id' : file.id, 'name' : file.name, 'md5' : file.md5Checksum });
     }));
   }).then(function() {
@@ -92,26 +95,20 @@ exports.downloadFiles = function downloadFiles(event,context) {
 
   let auth_data = null;
 
-  const have_auth = google.getServiceAuth(["https://www.googleapis.com/auth/drive.readonly"],true).then(function(auth) {
-    auth_data = auth.credentials;
-  });
+  const have_auth = google.getServiceAuth();
 
   const queue = new Queue(download_queue);
 
   const count = 1;
 
   have_auth.then(() => {
-    if ( ! auth_data || ! auth_data.access_token ) {
-      throw new Error('Invalid auth credentials');
-    }
-
-    if (total_messages < 1) {
-      throw new Error('No messages');
-    }
 
     return queue.shift(count);
 
   }).then(function(messages) {
+    if (messages.length < 1 ) {
+      throw new Error('No messages');
+    }
     return Promise.all(messages.map(function(message) {
       let file = JSON.parse(message.Body);
       console.log(file.id);
@@ -132,6 +129,7 @@ exports.downloadFiles = function downloadFiles(event,context) {
     } else {
       console.error(err);
       console.error(err.stack);
+      context.fail({error: err.message});
     }
   }).then(function() {
     context.succeed({ messageCount: 1 });
