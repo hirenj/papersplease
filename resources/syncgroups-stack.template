@@ -68,6 +68,25 @@
       },
       "DependsOn" : ["LambdaSubscribeWebhookRole","LambdaDownloadFilesRole","GoogleWebhookLambdaRole"]
     },
+    "LambdaQueueDownloadsRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "ManagedPolicyArns" : [ {"Ref" : "WriteDownloadQueue"},{ "Ref" : "ReadWriteConf" } ],
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      },
+      "DependsOn" : [ "WriteDownloadQueue" ]
+    },
     "LambdaDownloadFilesRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
@@ -137,6 +156,38 @@
         "Timeout" : 300
       },
       "DependsOn" : "LambdaDownloadFilesRole"
+    },
+    "queueDownloads" : {
+      "Type" : "AWS::Lambda::Function",
+      "Properties" : {
+        "Code" : {
+          "ZipFile": { "Fn::Join": ["", [
+            "exports.queueDownloads = function(event, context) {",
+            "  context.succeed('OK');",
+            "};"
+          ]]}
+        },
+        "Description" : "queueDownloads",
+        "Handler" : "index.queueDownloads",
+        "Role" : {"Fn::GetAtt" : ["LambdaQueueDownloadsRole", "Arn"] },
+        "Environment": {
+          "Variables": {
+            "GOOGLE_API_SECRET": {
+              "Ref": "GOOGLEAPISECRET"
+            },
+            "GOOGLE_API_KEY": {
+              "Ref": "GOOGLEAPIKEY"
+            },
+            "GOOGLE_REFRESH_TOKEN": {
+              "Ref": "GOOGLEREFRESHTOKEN"
+            }
+          }
+        },
+        "Runtime" : "nodejs6.10",
+        "MemorySize" : 128,
+        "Timeout" : 300
+      },
+      "DependsOn" : "LambdaQueueDownloadsRole"
     },
     "subscribeWebhook" : {
       "Type" : "AWS::Lambda::Function",

@@ -44,8 +44,12 @@ const get_page_token = function() {
     Bucket: bucket_name,
     Key: 'config/page_token'
   };
-  // OR return 'none' for starting from scratch
-  return s3.getObject(params).promise();
+  return s3.getObject(params).promise().then( data => {
+    return JSON.parse(data.Body.toString());
+  }).catch( err => {
+    console.log(err);
+    return { token: 'none' };
+  });
 };
 
 exports.googleWebhook = function acceptWebhook(event,context) {
@@ -59,7 +63,7 @@ exports.queueDownloads = function queueDownloads(event,context) {
   var download_promise = Promise.resolve(true);
 
   download_promise = get_page_token()
-  .then( token => download_changed_files(token) )
+  .then( token => download_changed_files(token.token) )
   .then(function(fileinfos) {
     return update_page_token(fileinfos.token).then( () => fileinfos.files );
   });

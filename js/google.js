@@ -7,10 +7,10 @@ const uuid = require('uuid');
 
 var bucket_name = 'test-gator';
 
-var google_get_start_token = function(auth) {
+var google_get_start_token = function() {
   var service = google.drive('v3');
   return new Promise(function(resolve,reject) {
-    service.changes.getStartPageToken({'auth' : auth},function(err,result) {
+    service.changes.getStartPageToken({},function(err,result) {
       if (err) {
         reject(err);
         return;
@@ -21,10 +21,10 @@ var google_get_start_token = function(auth) {
   });
 };
 
-var google_request_hook = function(auth,hook_url,token) {
+var google_request_hook = function(hook_url,token) {
   var service = google.drive('v3');
   return new Promise(function(resolve,reject) {
-    service.changes.watch({'auth' : auth,
+    service.changes.watch({
     pageToken: token,
     resource: {
       id: uuid.v1(),
@@ -41,14 +41,14 @@ var google_request_hook = function(auth,hook_url,token) {
   });
 };
 
-var google_register_hook = function(auth,hook_url) {
-  return google_get_start_token(auth).then(function(startPageToken) {
-    return google_request_hook(auth,hook_url,startPageToken);
+var google_register_hook = function(hook_url) {
+  return google_get_start_token().then(function(startPageToken) {
+    return google_request_hook(hook_url,startPageToken);
   });
 };
 
-var google_get_file_if_needed = function(auth,file) {
-  return google_get_file_if_needed_s3(auth,file);
+var google_get_file_if_needed = function(file) {
+  return google_get_file_if_needed_s3(file);
 }
 
 var check_existing_file_s3 = function(file) {
@@ -92,7 +92,7 @@ var check_existing_file_s3 = function(file) {
   });
 };
 
-var google_get_file_if_needed_s3 = function(auth,file) {
+var google_get_file_if_needed_s3 = function(file) {
   var drive = google.drive('v3');
   console.log("Getting file from google",file.id," md5 ",file.md5);
   return check_existing_file_s3(file).then(function(exists) {
@@ -108,7 +108,6 @@ var google_get_file_if_needed_s3 = function(auth,file) {
     };
     console.log("Trying upload to S3");
     var in_stream = drive.files.get({
-      'auth' : auth,
       'fileId' : file.id ,
       'alt' : 'media'
     });
@@ -129,7 +128,7 @@ var google_get_file_if_needed_s3 = function(auth,file) {
   });
 };
 
-var google_get_file_if_needed_local = function(auth,file) {
+var google_get_file_if_needed_local = function(file) {
   var service = google.drive('v3');
   return new Promise(function(resolve,reject) {
     fs.lstat(file.id+'.msdata.json',function(err,stats) {
@@ -141,7 +140,6 @@ var google_get_file_if_needed_local = function(auth,file) {
       var dest = fs.createWriteStream(file.id+'.msdata.json');
 
       service.files.get({
-        'auth' : auth,
         'fileId' : file.id ,
         'alt' : 'media'
       }).on('end',resolve).on('error',reject).pipe(dest);
@@ -149,18 +147,16 @@ var google_get_file_if_needed_local = function(auth,file) {
   });
 };
 
-const get_changed_files = (auth,page_token,files) => {
+const get_changed_files = (page_token,files) => {
   var service = google.drive('v3');
   if ( ! files ) {
     files = [];
   }
   if (page_token == 'none') {
-    return google_get_start_token(auth).then(function(token) {
-      return google_get_changed_files(auth,token,files);
-    });
+    return google_get_start_token().then(token => google_get_changed_files(token,files));
   }
   return new Promise(function(resolve,reject) {
-    service.changes.list({'auth' : auth, pageToken: page_token },function(err,result) {
+    service.changes.list({pageToken: page_token },function(err,result) {
       if (err) {
         reject(err);
         return;
@@ -169,12 +165,12 @@ const get_changed_files = (auth,page_token,files) => {
         return { id: file.fileId, removed: file.removed, name : file.file.name };
       })));
       var current_files = result.changes.filter(function(file) {
-        return ! file.removed && file.file.name.match(/msdata/);
+        return ! file.removed && file.file.fileExtension.match(/\.pdf$/);
       }).map(function(file) {
         return file.fileId;
       });
       if (result.nextPageToken) {
-        resolve(google_get_changed_files(auth,result.nextPageToken,files.concat(current_files)));
+        resolve(google_get_changed_files(result.nextPageToken,files.concat(current_files)));
         return;
       }
       if (result.newStartPageToken) {
@@ -187,43 +183,33 @@ const get_changed_files = (auth,page_token,files) => {
 };
 
 var getChangedFiles = function getChangedFiles(page_token) {
-  var scopes = ["https://www.googleapis.com/auth/drive.readonly"];
-  return getServiceAuth(scopes).then( (auth) => get_changed_files(auth,page_token) );
+  return getServiceAuth().then( () => get_changed_files(page_token) );
 };
 
 var registerHook = function registerHook(hook_url) {
-  var scopes = ["https://www.googleapis.com/auth/drive.readonly"];
-  return getServiceAuth(scopes).then(function(auth) {
-    return google_register_hook(auth,hook_url);
-  });
+  return getServiceAuth().then( () => google_register_hook(hook_url) );
 };
 
 var downloadFileIfNecessary = function downloadFileIfNecessary(file) {
-  var scopes = ["https://www.googleapis.com/auth/drive.readonly"];
-  if (file.auth_token && file.auth_token.access_token) {
-    console.log("We have an Auth token, trying to access directly");
-    var auth_client = new google.auth.OAuth2();
-    auth_client.credentials = file.auth_token;
-    delete file.auth_token.refresh_token;
-    return google_get_file_if_needed(auth_client,file);
-  }
   console.log("We have no auth token, trying to get a fresh auth");
-  return getServiceAuth(scopes).then(function(auth) {
-    return google_get_file_if_needed(auth,file);
-  });
+  return getServiceAuth().then( () => google_get_file_if_needed(file) );
 };
 
-var auth_promise;
+var getServiceAuth = function getServiceAuth() {
 
-var getServiceAuth = function getServiceAuth(scopes,force) {
-  if (auth_promise && ! force) {
-    console.log("Returning cached permissions");
-    return auth_promise;
-  }
-  auth_promise = require('lambda-helpers').secrets.getSecret(bucket_name).then(function(secret) {
-    return get_service_auth(secret,scopes);
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_API_KEY,
+    process.env.GOOGLE_API_SECRET
+  );
+
+  oauth2client.setCredentials({
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN
   });
-  return auth_promise;
+
+  // set auth as a global default
+  google.options({
+    auth: oauth2Client
+  });
 };
 
 exports.setRootBucket = function(bucket) {
