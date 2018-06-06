@@ -249,7 +249,7 @@ var get_file_if_needed_local = function(file) {
   });
 };
 
-const VALID_USERS = process.env.VALID_USERS.toLowerCase().split(',');
+const VALID_USERS = (process.env.VALID_USERS || '').toLowerCase().split(',');
 
 let shared_folder_promise = null;
 

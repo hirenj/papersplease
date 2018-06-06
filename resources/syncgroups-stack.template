@@ -165,7 +165,7 @@
         "Role" : {"Fn::GetAtt" : ["LambdaDownloadFilesRole", "Arn"] },
         "Environment": {
           "Variables": {
-            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
             "DOWNLOAD_QUEUE": { "Ref" : "DownloadQueue" },
             "GOOGLE_API_SECRET": {
               "Ref": "GOOGLEAPISECRET"
@@ -199,7 +199,7 @@
         "Role" : {"Fn::GetAtt" : ["LambdaQueueDownloadsRole", "Arn"] },
         "Environment": {
           "Variables": {
-            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
             "DOWNLOAD_QUEUE": { "Ref" : "DownloadQueue" },
             "GOOGLE_API_SECRET": {
               "Ref": "GOOGLEAPISECRET"
@@ -232,7 +232,7 @@
         "Role" : {"Fn::GetAtt" : ["LambdaDownloadFilesRole", "Arn"] },
         "Environment": {
           "Variables": {
-            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] }
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] }
           }
         },
         "Runtime" : "python3.6",
@@ -256,7 +256,7 @@
         "Role" : {"Fn::GetAtt" : ["LambdaDownloadFilesRole", "Arn"] },
         "Environment": {
           "Variables": {
-            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
             "VALID_USERS": {
               "Ref": "VALIDUSERS"
             },
@@ -293,7 +293,7 @@
         "Runtime" : "nodejs6.10",
         "Environment": {
           "Variables": {
-            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] }
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] }
           }
         },
         "MemorySize" : 128,
@@ -710,7 +710,7 @@
         "Role": { "Fn::GetAtt": ["GoogleWebhookLambdaRole", "Arn"]},
         "Environment": {
           "Variables": {
-            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
             "DOWNLOAD_QUEUE": { "Ref" : "DownloadQueue" },
             "DOWNLOAD_QUEUE_MACHINE": { "Ref" : "StateDownloadFiles" },
             "GOOGLE_API_SECRET": {
@@ -724,6 +724,7 @@
             }
           }
         },
+        "Timeout" : 300,
         "Runtime": "nodejs6.10"
       }
     },
