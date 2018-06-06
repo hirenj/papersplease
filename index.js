@@ -215,9 +215,12 @@ exports.downloadFiles = function downloadFiles(event,context) {
 exports.subscribeWebhook = function(event,context) {
   get_page_token().then( token => {
     get_hook_conf().then( hook_conf => {
-      google.stopHook(hook_conf);
-      google.registerHook(HOST_URL+'/google',token.page_token)
-      .then( res => update_hook_conf(res) )
+      google.stopHook(hook_conf)
+      .then( () => google.registerHook(HOST_URL+'/google',token.page_token))      
+      .then( res => {
+        console.log("Expiration in ",res.expiration);
+        return update_hook_conf(res);
+      })
       .then( res => {
         context.succeed({'status': 'OK'});
       })

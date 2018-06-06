@@ -141,6 +141,9 @@ var request_hook = function(hook_url,token) {
 };
 
 var remove_hook = function(conf) {
+  if ( ! conf.id ) {
+    return Promise.resolve();
+  }
   var service = google.drive('v3');
   return service.channels.stop({
   resource: {
