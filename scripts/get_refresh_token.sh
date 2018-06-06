@@ -7,7 +7,7 @@
 
 SCOPES="https://www.googleapis.com/auth/drive"
 
-echo "https://accounts.google.com/o/oauth2/auth?client_id=$GOOGLE_CLIENT_ID&redirect_uri=urn:ietf:wg:oauth:2.0:oob&scope=$SCOPES&response_type=code"
+echo "https://accounts.google.com/o/oauth2/auth?client_id=$GOOGLE_API_KEY&redirect_uri=urn:ietf:wg:oauth:2.0:oob&scope=$SCOPES&response_type=code"
 
 # Exchange Authorization code for an access token and a refresh token.
 
@@ -16,4 +16,4 @@ read -p "Enter access code: " access_code
 
 curl \
 --request POST \
---data "code=$access_code&client_id=$GOOGLE_CLIENT_ID&client_secret=$GOOGLE_CLIENT_SECRET&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code" https://accounts.google.com/o/oauth2/token
+--data "code=$access_code&client_id=$GOOGLE_API_KEY&client_secret=$GOOGLE_API_SECRET&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code" https://accounts.google.com/o/oauth2/token

@@ -3,14 +3,18 @@
 
 let download_queue = 'https://sqs.us-east-1.amazonaws.com/978536629153/papersplease-DownloadQueue';
 let bucket_name = 'papersplease-papers';
+let download_queue_machine = '';
 
 let config = {};
 
-try {
-  config = require('./resources.conf.json');
-  download_queue = config.queue.DownloadQueue;
-  bucket_name = config.buckets.dataBucket;
-} catch (e) {
+if (process.env.DOWNLOAD_QUEUE) {
+  download_queue = process.env.DOWNLOAD_QUEUE;
+}
+if (process.env.DOWNLOAD_QUEUE_MACHINE) {
+  download_queue_machine = process.env.DOWNLOAD_QUEUE_MACHINE;
+}
+if (process.env.BUCKET_NAME) {
+  bucket_name = process.env.BUCKET_NAME;
 }
 
 if (config.region) {
@@ -54,9 +58,36 @@ const get_page_token = function() {
   });
 };
 
+const runDownloader = function() {
+  const AWS = require('lambda-helpers').AWS;
+  const stepfunctions = new AWS.StepFunctions();
+
+  let params = {
+    stateMachineArn: download_queue_machine,
+    input: '{}',
+    name: ('DownloadQueue '+(new Date()).toString()).replace(/[^A-Za-z0-9]/g,'_')
+  };
+  return stepfunctions.listExecutions({ stateMachineArn: download_queue_machine, statusFilter: 'RUNNING'}).promise().then( running => {
+    if (running.executions && running.executions.length > 0) {
+      throw new Error('Already running');
+    }
+  })
+  .then( () => stepfunctions.startExecution(params).promise())
+  .catch( err => {
+    if (err.message === 'Already running') {
+      return;
+    }
+    throw err;
+  });
+};
+
 exports.googleWebhook = function acceptWebhook(event,context) {
-  // downloadEverything()
-  // START STEP FUNCTION TO DOWNLOAD FILES
+  new Promise( resolve => {
+    queueDownloads({},{ succeed: resolve });
+  })
+  .then( () => runDownloader())
+  .then( () => context.succeed('OK'))
+  .catch( err => context.fail(err) );
 };
 
 exports.queueDownloads = function queueDownloads(event,context) {
@@ -147,12 +178,6 @@ exports.downloadFiles = function downloadFiles(event,context) {
     context.succeed({ messageCount: 1 });
   });
 };
-
-/*
-  subscribeWebhook -> run again 5 minutes before expiration time for hook
-  change -> set rule to run once 3 minutes from now
-  downloadEverything -> set change_state (i.e. the target for downloadEverything) to current state
-*/
 
 exports.subscribeWebhook = function(event,context) {
   console.log(event);

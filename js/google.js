@@ -8,7 +8,7 @@ const {PassThrough} = require('stream');
 
 var bucket_name = 'test-gator';
 
-const PDF_ROOT = '0B9D1j47bHtStdDdiZnJhRXVvSWc';
+const PDF_ROOT = 'root';
 
 let get_folders_in = function(parent='root',pageToken) {
   const service = google.drive('v3');
@@ -38,28 +38,28 @@ let create_folder = function(parent='root',foldername) {
   });
 };
 
-let get_existing_tags = () => {
-  return get_folders_in(PDF_ROOT).then( folders => {
+let get_existing_tags = (root=PDF_ROOT) => {
+  return get_folders_in(root).then( folders => {
     return folders;
   });
 };
 
-let ensure_tagset = (tags) => {
-  return get_existing_tags().then( existing_tags => {
+let ensure_tagset = (tags,root=PDF_ROOT) => {
+  return get_existing_tags(root).then( existing_tags => {
     let existing = existing_tags.map( tag => tag.name.toLowerCase() );
     return Promise.all( tags.map( tag => {
       let lc_tag = tag.toLowerCase();
       if (existing.indexOf(lc_tag) >= 0) {
         return Promise.resolve(existing_tags [ existing.indexOf( lc_tag ) ]);
       }
-      return create_folder(PDF_ROOT,tag).then( id => {
+      return create_folder(root,tag).then( id => {
         return { id: id, name: tag };
       });
     }));
   });
 };
 
-let get_tags_for_file = (fileId) => {
+let get_tags_for_file = (fileId,roots=[PDF_ROOT]) => {
   const service = google.drive('v3');
   return service.files.get({
     fileId: fileId,
@@ -67,36 +67,50 @@ let get_tags_for_file = (fileId) => {
   }).then( resp => {
     return resp.data.parents;
   }).then( parents => {
-    return get_existing_tags().then( tags => {
-      let ids = tags.map( t => t.id );
-      return parents.map( par => tags[ ids.indexOf( par ) ]).filter( t => t );
-    });
+    let results = [];
+    let curr_roots = roots.filter( root => parents.indexOf(root) >= 0 );
+    return Promise.all( curr_roots.map( root => {
+      return get_existing_tags(root).then( tags => {
+        let ids = tags.map( t => t.id );
+        return { root: root, tags: parents.map( par => tags[ ids.indexOf( par ) ]).filter( t => t ) };
+      });
+    }) );
   });
 };
 
-let set_tags_for_file = (fileId,tags,empty=['inbox']) => {
+
+let set_tags_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
   const service = google.drive('v3');
+
+  if (! roots ) {
+    return get_shared_folders().then( valid_roots => set_tags_for_file(fileId,tags,empty,roots=Object.keys(valid_roots)) );
+  }
 
   if (tags.length == 0) {
     tags = [].concat(empty);
   }
-  return get_tags_for_file(fileId).then( current_tags => {
-    console.log('Current tags are',current_tags);
-    return ensure_tagset(tags).then( all_tags => {
-      console.log('available tags are',all_tags);
-      let curr_ids = current_tags.map( t => t.id );
-      let wanted_tags = all_tags.map( t => t.id );
-      let to_add = wanted_tags.filter( t => curr_ids.indexOf(t) < 0 ).join(',');
-      let to_remove = curr_ids.filter( t => wanted_tags.indexOf(t) < 0 ).join(',');
-      if (to_add === '' && to_remove === '') {
-        return Promise.resolve();
-      }
-      return service.files.update({
-        fileId: fileId,
-        addParents: to_add,
-        removeParents: to_remove
+  return get_tags_for_file(fileId,roots).then( root_tagset => {
+    Promise.all( root_tagset.map( root_tag => {
+      let current_tags = root_tag.tags;
+      let root = root_tag.root;
+      console.log('Current tags are',current_tags);
+      return ensure_tagset(tags,root).then( all_tags => {
+        console.log('available tags are',all_tags);
+        let curr_ids = current_tags.map( t => t.id );
+        let wanted_tags = all_tags.map( t => t.id );
+        let to_add = wanted_tags.filter( t => curr_ids.indexOf(t) < 0 ).join(',');
+        let to_remove = curr_ids.filter( t => wanted_tags.indexOf(t) < 0 ).join(',');
+        if (to_add === '' && to_remove === '') {
+          return Promise.resolve();
+        }
+        return service.files.update({
+          fileId: fileId,
+          addParents: to_add,
+          removeParents: to_remove
+        });
       });
-    });
+    }));
+
   });
 };
 
@@ -228,18 +242,51 @@ var get_file_if_needed_local = function(file) {
       var dest = fs.createWriteStream(file.id+'.msdata.json');
 
       service.files.get({
-        'fileId' : file.id ,
+        'fileId' : file.id,
         'alt' : 'media'
       }).on('end',resolve).on('error',reject).pipe(dest);
     })
   });
 };
 
-const get_changed_files = (page_token,files) => {
-  var service = google.drive('v3');
-  if ( ! files ) {
-    files = [];
+const VALID_USERS = process.env.VALID_USERS.toLowerCase().split(',');
+
+let shared_folder_promise = null;
+
+let get_shared_folders = () => {
+  const service = google.drive('v3');
+  if ( shared_folder_promise ) {
+    return shared_folder_promise;
   }
+
+  shared_folder_promise = service.files.list({
+    q: 'sharedWithMe and mimeType = \'application/vnd.google-apps.folder\'',
+    fields: 'files(name,id,sharingUser/emailAddress)'
+  })
+  .then( resp => resp.data )
+  .then( results => results.files.map( dir => {
+    return { name: dir.name, id: dir.id, user: dir.sharingUser.emailAddress };
+  }))
+  .then( dirs => dirs.filter( dir => VALID_USERS.indexOf(dir.user.toLowerCase()) >= 0 ))
+  .then( dirs => {
+    let result = {};
+    for (let dir of dirs) {
+      result[ dir.id ] = dir;
+    }
+    return result;
+  });
+
+  return shared_folder_promise;
+
+};
+
+const get_changed_files = (page_token,files=[],valid_roots=null) => {
+  var service = google.drive('v3');
+
+  if ( ! valid_roots ) {
+    return get_shared_folders().then( valid_roots => get_changed_files(page_token,files,valid_roots));
+  }
+
   if (page_token == 'none') {
     console.log('No page token already, getting a new one');
     return get_start_token().then(token => get_changed_files(token,files));
@@ -259,12 +306,12 @@ const get_changed_files = (page_token,files) => {
         return { id: file.fileId, removed: file.removed, name : file.file.name, md5Checksum: file.file.md5Checksum };
       })));
       var current_files = result.changes.filter(function(file) {
-        return ! file.removed && (file.file.name || '').match(/\.pdf$/) && file.parents.indexOf(PDF_ROOT) >= 0;
+        return ! file.removed && (file.file.name || '').match(/\.pdf$/) && file.parents.filter( par => valid_roots[par] ).length > 0;
       }).map(function(file) {
         return file.file;
       });
       if (result.nextPageToken) {
-        resolve(get_changed_files(result.nextPageToken,files.concat(current_files)));
+        resolve(get_changed_files(result.nextPageToken,files.concat(current_files),valid_roots));
         return;
       }
       if (result.newStartPageToken) {
@@ -311,6 +358,7 @@ var getServiceAuth = function getServiceAuth() {
   });
   return Promise.resolve();
 };
+
 
 exports.setRootBucket = function(bucket) {
   bucket_name = bucket;

@@ -19,6 +19,11 @@
       "Type": "String",
       "Default": "",
       "Description": "Refresh Token for Google auth for user"
+    },
+    "VALIDUSERS" : {
+      "Type": "String",
+      "Default": "",
+      "Description": "Valid users"
     }
   },
   "Resources": {
@@ -160,6 +165,8 @@
         "Role" : {"Fn::GetAtt" : ["LambdaDownloadFilesRole", "Arn"] },
         "Environment": {
           "Variables": {
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "DOWNLOAD_QUEUE": { "Ref" : "DownloadQueue" },
             "GOOGLE_API_SECRET": {
               "Ref": "GOOGLEAPISECRET"
             },
@@ -192,6 +199,8 @@
         "Role" : {"Fn::GetAtt" : ["LambdaQueueDownloadsRole", "Arn"] },
         "Environment": {
           "Variables": {
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "DOWNLOAD_QUEUE": { "Ref" : "DownloadQueue" },
             "GOOGLE_API_SECRET": {
               "Ref": "GOOGLEAPISECRET"
             },
@@ -223,6 +232,7 @@
         "Role" : {"Fn::GetAtt" : ["LambdaDownloadFilesRole", "Arn"] },
         "Environment": {
           "Variables": {
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] }
           }
         },
         "Runtime" : "python3.6",
@@ -246,6 +256,10 @@
         "Role" : {"Fn::GetAtt" : ["LambdaDownloadFilesRole", "Arn"] },
         "Environment": {
           "Variables": {
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "VALID_USERS": {
+              "Ref": "VALIDUSERS"
+            },
             "GOOGLE_API_SECRET": {
               "Ref": "GOOGLEAPISECRET"
             },
@@ -277,8 +291,13 @@
         "Handler" : "index.subscribeWebhook",
         "Role" : {"Fn::GetAtt" : ["LambdaSubscribeWebhookRole", "Arn"] },
         "Runtime" : "nodejs6.10",
+        "Environment": {
+          "Variables": {
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] }
+          }
+        },
         "MemorySize" : 128,
-        "Timeout" : 20
+        "Timeout" : 300
       },
       "DependsOn" : "LambdaSubscribeWebhookRole"
     },
@@ -649,7 +668,29 @@
         }
       }
     },
-
+    "StartExecutionStateDownloadFiles": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "Description": "StartExecutionStateDownloadFiles",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "states:StartExecution",
+                "states:ListExecutions"
+              ],
+              "Resource": [
+                {
+                  "Ref": "StateDownloadFiles"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
     "GoogleWebhookLambda": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
@@ -669,6 +710,9 @@
         "Role": { "Fn::GetAtt": ["GoogleWebhookLambdaRole", "Arn"]},
         "Environment": {
           "Variables": {
+            "BUCKET_NAME": { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-papers" ] ] },
+            "DOWNLOAD_QUEUE": { "Ref" : "DownloadQueue" },
+            "DOWNLOAD_QUEUE_MACHINE": { "Ref" : "StateDownloadFiles" },
             "GOOGLE_API_SECRET": {
               "Ref": "GOOGLEAPISECRET"
             },
@@ -695,7 +739,7 @@
             "Action": ["sts:AssumeRole"]
           }]
         },
-        "ManagedPolicyArns": ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole", {"Ref" : "WriteDownloadQueue"} ]
+        "ManagedPolicyArns": ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole", {"Ref" : "WriteDownloadQueue"}, {"Ref" : "StartExecutionStateDownloadFiles"} ]
       }
     },
 
