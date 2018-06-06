@@ -16,7 +16,7 @@ if (process.env.DOWNLOAD_QUEUE_MACHINE) {
 if (process.env.BUCKET_NAME) {
   bucket_name = process.env.BUCKET_NAME;
 }
-const HOST_URL = (process.env.PUBLIC_HOST || '');
+const HOST_URL = (process.env.HOST_URL || '');
 
 if (config.region) {
   require('lambda-helpers').AWS.setRegion(config.region);
@@ -59,6 +59,33 @@ const get_page_token = function() {
   });
 };
 
+const update_hook_conf = function(conf) {
+  const AWS = require('lambda-helpers').AWS;
+  const s3 = new AWS.S3();
+  var params = {
+    Bucket: bucket_name,
+    Key: 'config/hook',
+    Body: JSON.stringify(conf)
+  };
+  console.log(params);
+  return s3.putObject(params).promise();
+};
+
+const get_hook_conf = function() {
+  const AWS = require('lambda-helpers').AWS;
+  const s3 = new AWS.S3();
+  var params = {
+    Bucket: bucket_name,
+    Key: 'config/hook'
+  };
+  return s3.getObject(params).promise().then( data => {
+    return JSON.parse(data.Body.toString());
+  }).catch( err => {
+    return {};
+  });
+};
+
+
 const runDownloader = function() {
   const AWS = require('lambda-helpers').AWS;
   const stepfunctions = new AWS.StepFunctions();
@@ -87,7 +114,12 @@ exports.googleWebhook = function acceptWebhook(event,context) {
     exports.queueDownloads({},{ succeed: resolve });
   })
   .then( () => runDownloader())
-  .then( () => context.succeed({ 'status': 'OK' }))
+  .then( () => context.succeed({
+        isBase64Encoded: false,
+        statusCode: 200,
+        headers : {},
+        body: JSON.stringify({'status': 'OK'})
+      }))
   .catch( err => context.fail(err) );
 };
 
@@ -182,9 +214,14 @@ exports.downloadFiles = function downloadFiles(event,context) {
 
 exports.subscribeWebhook = function(event,context) {
   get_page_token().then( token => {
-    google.registerHook(HOST_URL+'/google',token.page_token).then( res => {
-      context.succeed({'status' : 'OK'});
-    })
-    .catch( err => context.fail(err.message));
+    get_hook_conf().then( hook_conf => {
+      google.stopHook(hook_conf);
+      google.registerHook(HOST_URL+'/google',token.page_token)
+      .then( res => update_hook_conf(res) )
+      .then( res => {
+        context.succeed({'status': 'OK'});
+      })
+      .catch( err => context.fail(err.message));
+    });
   });
 };

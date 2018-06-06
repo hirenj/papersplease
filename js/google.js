@@ -130,23 +130,28 @@ var get_start_token = function() {
 
 var request_hook = function(hook_url,token) {
   var service = google.drive('v3');
-  return new Promise(function(resolve,reject) {
-    service.changes.watch({
+  return service.changes.watch({
     pageToken: token,
     resource: {
       id: uuid.v1(),
       type: 'web_hook',
       address: hook_url
-    }},function(err,result) {
-      if (err) {
-        reject(err);
-        return;
-      }
-      result.page_token = token;
-      resolve(result);
-    });
-  });
+    }})
+  .then( resp => resp.data );
 };
+
+var remove_hook = function(conf) {
+  var service = google.drive('v3');
+  return service.channels.stop({
+  resource: {
+    kind: conf.kind,
+    id: conf.id,
+    resourceId: conf.resourceId,
+    resourceUri: conf.resourceUri,
+    type: 'web_hook',
+    address: conf.address
+  }});
+}
 
 var register_hook = function(hook_url,token) {
   if (token === 'none') {
@@ -335,6 +340,10 @@ var registerHook = function registerHook(hook_url,token) {
   return getServiceAuth().then( () => register_hook(hook_url,token) );
 };
 
+let stopHook = function stopHook(conf) {
+  return getServiceAuth().then( () => remove_hook(conf) );
+}
+
 var downloadFileIfNecessary = function downloadFileIfNecessary(file) {
   console.log("We have no auth token, trying to get a fresh auth");
   return getServiceAuth().then( () => get_file_if_needed(file) );
@@ -367,6 +376,7 @@ exports.setRootBucket = function(bucket) {
 };
 
 exports.registerHook = registerHook;
+exports.stopHook = stopHook;
 exports.downloadFileIfNecessary = downloadFileIfNecessary;
 exports.getChangedFiles = getChangedFiles;
 exports.setTagsForFileId = setTagsForFileId;
