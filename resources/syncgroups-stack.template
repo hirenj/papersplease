@@ -28,7 +28,7 @@
     "HOSTURL" : {
       "Type": "String",
       "Default": "https://papersplease-api.glycocode.com/api",
-      "Description": "HOSTNAME base for api"      
+      "Description": "HOSTNAME base for api"
     }
   },
   "Resources": {
