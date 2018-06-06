@@ -201,6 +201,9 @@
           "Variables": {
             "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
             "DOWNLOAD_QUEUE": { "Ref" : "DownloadQueue" },
+            "VALID_USERS": {
+              "Ref": "VALIDUSERS"
+            },
             "GOOGLE_API_SECRET": {
               "Ref": "GOOGLEAPISECRET"
             },
@@ -228,7 +231,7 @@
           ]]}
         },
         "Description" : "extractTags",
-        "Handler" : "index.extractTags",
+        "Handler" : "pdfannots.lambda_handler",
         "Role" : {"Fn::GetAtt" : ["LambdaDownloadFilesRole", "Arn"] },
         "Environment": {
           "Variables": {
@@ -713,6 +716,9 @@
             "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
             "DOWNLOAD_QUEUE": { "Ref" : "DownloadQueue" },
             "DOWNLOAD_QUEUE_MACHINE": { "Ref" : "StateDownloadFiles" },
+            "VALID_USERS": {
+              "Ref": "VALIDUSERS"
+            },
             "GOOGLE_API_SECRET": {
               "Ref": "GOOGLEAPISECRET"
             },
@@ -740,7 +746,7 @@
             "Action": ["sts:AssumeRole"]
           }]
         },
-        "ManagedPolicyArns": ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole", {"Ref" : "WriteDownloadQueue"}, {"Ref" : "StartExecutionStateDownloadFiles"} ]
+        "ManagedPolicyArns": ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole", {"Ref" : "WriteDownloadQueue"}, {"Ref" : "StartExecutionStateDownloadFiles"}, { "Ref" : "ReadWriteConf" } ]
       }
     },
 

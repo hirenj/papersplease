@@ -306,7 +306,8 @@ const get_changed_files = (page_token,files=[],valid_roots=null) => {
         return { id: file.fileId, removed: file.removed, name : file.file.name, md5Checksum: file.file.md5Checksum };
       })));
       var current_files = result.changes.filter(function(file) {
-        return ! file.removed && (file.file.name || '').match(/\.pdf$/) && file.parents.filter( par => valid_roots[par] ).length > 0;
+        console.log(file);
+        return ! file.removed && file.file.parents && (file.file.name || '').match(/\.pdf$/) && file.file.parents.filter( par => valid_roots[par] ).length > 0;
       }).map(function(file) {
         return file.file;
       });

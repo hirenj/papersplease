@@ -83,7 +83,7 @@ const runDownloader = function() {
 
 exports.googleWebhook = function acceptWebhook(event,context) {
   new Promise( resolve => {
-    queueDownloads({},{ succeed: resolve });
+    exports.queueDownloads({},{ succeed: resolve });
   })
   .then( () => runDownloader())
   .then( () => context.succeed('OK'))
