@@ -216,7 +216,8 @@ exports.subscribeWebhook = function(event,context) {
   get_page_token().then( token => {
     get_hook_conf().then( hook_conf => {
       google.stopHook(hook_conf)
-      .then( () => google.registerHook(HOST_URL+'/google',token.page_token))      
+      .catch( err => console.log('Removing existing error',err.code) )
+      .then( () => google.registerHook(HOST_URL+'/google',token.page_token))
       .then( res => {
         console.log("Expiration in ",res.expiration);
         return update_hook_conf(res);
