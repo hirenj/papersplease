@@ -113,7 +113,11 @@ exports.googleWebhook = function acceptWebhook(event,context) {
   new Promise( resolve => {
     exports.queueDownloads({},{ succeed: resolve });
   })
-  .then( () => runDownloader())
+  .then( (res) => {
+    if (res && res.count > 0) {
+      return runDownloader();
+    }
+  })
   .then( () => context.succeed({
         isBase64Encoded: false,
         statusCode: 200,
@@ -134,6 +138,8 @@ exports.queueDownloads = function queueDownloads(event,context) {
     return update_page_token(fileinfos.token).then( () => fileinfos.files );
   });
 
+  let file_count = 0;
+
   // Push all the shared files into the queue
   download_promise.then(function(files) {
     console.log("Files to download ",files);
@@ -143,14 +149,15 @@ exports.queueDownloads = function queueDownloads(event,context) {
     }
     console.log("Queueing files for download");
     return Promise.all(files.map((file) => {
+      file_count += 1;
       console.log('Message',{'id' : file.id, 'name' : file.name, 'md5' : file.md5Checksum });
       return queue.sendMessage({'id' : file.id, 'name' : file.name, 'md5' : file.md5Checksum });
     }));
   }).then(function() {
-    context.succeed('Done');
+    context.succeed({ count: file_count });
   }).catch(function(err) {
     console.error(err,err.stack);
-    context.succeed('Done');
+    context.succeed({ count: 0 });
   });
 };
 
