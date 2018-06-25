@@ -311,6 +311,7 @@ const get_changed_files = (page_token,files=[],valid_roots=null) => {
         return;
       }
       let result = resp.data;
+      result.changes = (result.changes || []).filter( file => file.file );
       console.log("Changes",JSON.stringify(result.changes.map(function(file) {
         return { id: file.fileId, removed: file.removed, name : file.file.name, md5Checksum: file.file.md5Checksum };
       })));
