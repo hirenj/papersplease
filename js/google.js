@@ -89,11 +89,13 @@ let set_tags_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
   if (tags.length == 0) {
     tags = [].concat(empty);
   }
+
+  console.log('Getting tags for file ',fileId,'roots ',roots);
   return get_tags_for_file(fileId,roots).then( root_tagset => {
     Promise.all( root_tagset.map( root_tag => {
       let current_tags = root_tag.tags;
       let root = root_tag.root;
-      console.log('Current tags are',current_tags);
+      console.log('Current tags are',current_tags,'in root',root);
       return ensure_tagset(tags,root).then( all_tags => {
         console.log('available tags are',all_tags);
         let curr_ids = current_tags.map( t => t.id );
