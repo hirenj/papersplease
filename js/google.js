@@ -235,7 +235,7 @@ var get_file_if_needed_s3 = function(file) {
       res.data.pipe(stream);
       params.Body = stream;
       params.ContentMD5 = new Buffer(file.md5 || '','hex').toString('base64');
-      var options = {partSize: 15 * 1024 * 1024, queueSize: 1};
+      var options = {partSize: 25 * 1024 * 1024, queueSize: 1};
       return s3.upload(params, options).promise();
     });
   });
