@@ -167,6 +167,7 @@ exports.setTags = function(event,context) {
   let tags = (event.extracted.stamps || []).map( stamp => stamp.text );
   console.log('Setting tags for ',fileId,tags);
   google.setTagsForFileId( fileId, tags ).then( () => {
+    console.log('Set tags');
     context.succeed(event);
   }).catch( err => {
     context.fail(err.message);

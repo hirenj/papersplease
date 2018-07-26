@@ -47,6 +47,7 @@ let get_existing_tags = (root=PDF_ROOT) => {
 let ensure_tagset = (tags,root=PDF_ROOT) => {
   return get_existing_tags(root).then( existing_tags => {
     let existing = existing_tags.map( tag => tag.name.toLowerCase() );
+    console.log('Ensuring tags - existing tags for root',root,existing);
     return Promise.all( tags.map( tag => {
       let lc_tag = tag.toLowerCase();
       if (existing.indexOf(lc_tag) >= 0) {
@@ -83,7 +84,7 @@ let set_tags_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
   const service = google.drive('v3');
 
   if (! roots ) {
-    return get_shared_folders().then( valid_roots => set_tags_for_file(fileId,tags,empty,roots=Object.keys(valid_roots)) );
+    return get_shared_folders().then( valid_roots => { return set_tags_for_file(fileId,tags,empty,roots=Object.keys(valid_roots)) });
   }
 
   if (tags.length == 0) {
@@ -92,7 +93,7 @@ let set_tags_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
 
   console.log('Getting tags for file ',fileId,'roots ',roots);
   return get_tags_for_file(fileId,roots).then( root_tagset => {
-    Promise.all( root_tagset.map( root_tag => {
+    return Promise.all( root_tagset.map( root_tag => {
       let current_tags = root_tag.tags;
       let root = root_tag.root;
       console.log('Current tags are',current_tags,'in root',root);
@@ -103,8 +104,10 @@ let set_tags_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
         let to_add = wanted_tags.filter( t => curr_ids.indexOf(t) < 0 ).join(',');
         let to_remove = curr_ids.filter( t => wanted_tags.indexOf(t) < 0 ).join(',');
         if (to_add === '' && to_remove === '') {
+          console.log('Not moving anything');
           return Promise.resolve();
         }
+        console.log('Moving file');
         return service.files.update({
           fileId: fileId,
           addParents: to_add,
@@ -356,7 +359,7 @@ var downloadFileIfNecessary = function downloadFileIfNecessary(file) {
 };
 
 var setTagsForFileId = function setTagsForFileId(fileId,tags) {
-  return getServiceAuth().then( () => set_tags_for_file(fileId,tags) );
+  return getServiceAuth().then( () => { return set_tags_for_file(fileId,tags); });
 };
 
 var getServiceAuth = function getServiceAuth() {
