@@ -195,13 +195,17 @@ exports.downloadFiles = function downloadFiles(event,context) {
     }
     return Promise.all(messages.map(function(message) {
       let file = JSON.parse(message.Body);
-      console.log(file.id);
+      console.log(file.name,file.id);
       return google.downloadFileIfNecessary({
         'id' : file.id,
         'auth_token' : auth_data,
         'md5' : file.md5,
         'name' : file.name,
         'groupid' : file.group
+      }).catch(err => {
+        if (err.message !== 'BadMD5') {
+          throw err;
+        }
       }).then( downloaded => {
         queue.finalise(message.ReceiptHandle);
       });
@@ -211,9 +215,9 @@ exports.downloadFiles = function downloadFiles(event,context) {
       console.log("No messages");
       context.succeed({messageCount: 0});
     } else {
-      console.error(err);
-      console.error(err.stack);
-      context.fail({error: err.message});
+      console.error('Caught error',err);
+      console.error('Caught error',err.stack);
+      context.fail(JSON.stringify({error: err.message}));
     }
   }).then(function() {
     context.succeed({ messageCount: 1 });

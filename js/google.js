@@ -240,6 +240,13 @@ var get_file_if_needed_s3 = function(file) {
       params.ContentMD5 = new Buffer(file.md5 || '','hex').toString('base64');
       var options = {partSize: 25 * 1024 * 1024, queueSize: 1};
       return s3.upload(params, options).promise();
+    }).catch( err => {
+      if (err.code === 'BadDigest') {
+        console.log('Bad MD5 sum');
+        throw new Error('BadMD5');
+        return;
+      }
+      throw err;
     });
   });
 };
