@@ -21,6 +21,48 @@
         } ]
       }
     },
+    "TaskSchedule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "Periodically check for new papers from the pocket list.",
+        "Name": "read_papers_ecs_task",
+        "ScheduleExpression": "rate(2 hours)",
+        "State": "DISABLED",
+        "Targets": [
+          {
+            "Id": "read_papers_ecs_task",
+            "RoleArn": {
+              "Fn::GetAtt": ["ReadPapersRole", "Arn"]
+            },
+            "EcsParameters": {
+              "TaskDefinitionArn": { "Ref": "ZoteroTask" },
+              "TaskCount": 1
+            },
+            "Arn": {
+              "Fn::GetAtt": ["ZoteroCluster", "Arn"]
+            }
+          }
+        ]
+      }
+    },
+    "ReadPapersRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "ManagedPolicyArns" : [ {"Ref" : "ReadWritePapers" } ],
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
     "VPC" : {
       "Type" : "AWS::EC2::VPC",
       "Properties" : {
