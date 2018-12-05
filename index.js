@@ -165,7 +165,12 @@ exports.setTags = function(event,context) {
   let filename = event.key;
   let fileId = filename.replace(/.*google\-/,'');
   let tags = (event.extracted.stamps || []).map( stamp => stamp.text );
+  let lc_tags = tags.map( tag => tag.toLowerCase() );
   console.log('Setting tags for ',fileId,tags);
+  if (lc_tags.indexOf('inbox') >= 0) {
+    console.log('Removing other tags because of inbox tag');
+    tags = [];
+  }
   google.setTagsForFileId( fileId, tags ).then( () => {
     console.log('Set tags');
     context.succeed(event);
