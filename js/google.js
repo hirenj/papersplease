@@ -237,17 +237,28 @@ var get_file_if_needed_s3 = function(file) {
     }, {responseType: 'stream'}).then( res => {
       res.data.pipe(stream);
       params.Body = stream;
-      let max_chunk = 25 * 1024 * 1024;
+      let max_chunk = 30 * 1024 * 1024;
+
       if (file.size >= max_chunk) {
+        console.log('File size too large, increasing multipart size for MD5 check');
+        params.ContentMD5 = new Buffer(file.md5 || '','hex').toString('base64');
         max_chunk = file.size + 1024*1024;
+      } else {
+        params.ContentMD5 = new Buffer(file.md5 || '','hex').toString('base64');
       }
-      params.ContentMD5 = new Buffer(file.md5 || '','hex').toString('base64');
+
+      console.log('Using multipart part size of',max_chunk);
+
       var options = {partSize: max_chunk, queueSize: 1};
       return s3.upload(params, options).promise();
     }).catch( err => {
       if (err.code === 'BadDigest') {
         console.log('Bad MD5 sum');
         throw new Error('BadMD5');
+        return;
+      }
+      if (err.code === 'InvalidDigest') {
+        console.log('File too large for uploading, skipping');
         return;
       }
       if (err.code == 404) {
