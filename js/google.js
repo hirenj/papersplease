@@ -237,8 +237,12 @@ var get_file_if_needed_s3 = function(file) {
     }, {responseType: 'stream'}).then( res => {
       res.data.pipe(stream);
       params.Body = stream;
+      let max_chunk = 25 * 1024 * 1024;
+      if (file.size >= max_chunk) {
+        max_chunk = file.size + 1024*1024;
+      }
       params.ContentMD5 = new Buffer(file.md5 || '','hex').toString('base64');
-      var options = {partSize: 25 * 1024 * 1024, queueSize: 1};
+      var options = {partSize: max_chunk, queueSize: 1};
       return s3.upload(params, options).promise();
     }).catch( err => {
       if (err.code === 'BadDigest') {
