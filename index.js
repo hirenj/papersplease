@@ -150,8 +150,8 @@ exports.queueDownloads = function queueDownloads(event,context) {
     console.log("Queueing files for download");
     return Promise.all(files.map((file) => {
       file_count += 1;
-      console.log('Message',{'id' : file.id, 'name' : file.name, 'md5' : file.md5Checksum, 'size' : file.size });
-      return queue.sendMessage({'id' : file.id, 'name' : file.name, 'md5' : file.md5Checksum, 'size' : file.size });
+      console.log('Message',{'id' : file.id, 'name' : file.name, 'md5' : file.md5Checksum, 'size' : parseInt(file.size) });
+      return queue.sendMessage({'id' : file.id, 'name' : file.name, 'md5' : file.md5Checksum, 'size' : parseInt(file.size) });
     }));
   }).then(function() {
     context.succeed({ count: file_count });
