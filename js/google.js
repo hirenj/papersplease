@@ -250,6 +250,10 @@ var get_file_if_needed_s3 = function(file) {
         throw new Error('BadMD5');
         return;
       }
+      if (err.code == 404) {
+        console.log('File missing, skipping');
+        return;
+      }
       throw err;
     });
   });
@@ -320,7 +324,7 @@ const get_changed_files = (page_token,files=[],valid_roots=null) => {
   return new Promise(function(resolve,reject) {
     service.changes.list({
       pageToken: page_token,
-      fields: 'newStartPageToken, nextPageToken, changes(fileId, file/id, file/name, file/md5Checksum, file/parents)'
+      fields: 'newStartPageToken, nextPageToken, changes(fileId, file/id, file/name, file/md5Checksum, file/parents, file/size)'
     },function(err,resp) {
       if (err) {
         reject(err);
