@@ -183,7 +183,7 @@
             }
           }
         },
-        "Runtime" : "nodejs6.10",
+        "Runtime" : "nodejs12.x",
         "MemorySize" : 512,
         "Timeout" : 300
       },
@@ -220,7 +220,7 @@
             }
           }
         },
-        "Runtime" : "nodejs6.10",
+        "Runtime" : "nodejs12.x",
         "MemorySize" : 128,
         "Timeout" : 300
       },
@@ -279,7 +279,7 @@
             }
           }
         },
-        "Runtime" : "nodejs6.10",
+        "Runtime" : "nodejs12.x",
         "MemorySize" : 128,
         "Timeout" : 300
       },
@@ -298,7 +298,7 @@
         "Description" : "subscribeWebhook",
         "Handler" : "index.subscribeWebhook",
         "Role" : {"Fn::GetAtt" : ["LambdaSubscribeWebhookRole", "Arn"] },
-        "Runtime" : "nodejs6.10",
+        "Runtime" : "nodejs12.x",
         "Environment": {
           "Variables": {
             "BUCKET_NAME": { "Fn::Join" :  [ "", [ { "Ref" : "AWS::StackName" }, "-papers" ] ] },
@@ -635,7 +635,7 @@
           "Variables": {
           }
         },
-        "Runtime" : "nodejs6.10",
+        "Runtime" : "nodejs12.x",
         "MemorySize" : 128,
         "Timeout" : 300
       },
@@ -746,7 +746,7 @@
           }
         },
         "Timeout" : 300,
-        "Runtime": "nodejs6.10"
+        "Runtime": "nodejs12.x"
       }
     },
 
