@@ -62,6 +62,8 @@ let ensure_tagset = (tags,root=PDF_ROOT) => {
 
 let get_tags_for_file = (fileId,roots=[PDF_ROOT]) => {
   const service = google.drive('v3');
+  // FIXME - Get shortcuts to file, and then get parents
+  //         for each of the shortcuts
   return service.files.get({
     fileId: fileId,
     fields: 'parents'
@@ -108,6 +110,8 @@ let set_tags_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
           return Promise.resolve();
         }
         console.log('Moving file');
+        // FIXME - Add shortcut in parent if shortcut does not exist
+        //         Remove shortcuts from parent in to_remove
         return service.files.update({
           fileId: fileId,
           addParents: to_add,
