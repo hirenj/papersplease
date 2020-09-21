@@ -60,10 +60,61 @@ let ensure_tagset = (tags,root=PDF_ROOT) => {
   });
 };
 
+let get_all_shortcuts = (existing_tags=[],pageToken) => {
+  let parent_query = existing_tags.map( tag => `'${tag.id}' in parents` ).join(' or ');
+  const service = google.drive('v3');
+  return service.files.list({
+    q: `mimeType='application/vnd.google-apps.shortcut' and shortcutDetails.targetMimeType = 'application/pdf' and (${parent_query})`,
+    fields: 'nextPageToken,files(id,parents,shortcutDetails)',
+    pageToken: pageToken
+  }).then( resp => {
+    let result = resp.data;
+    if (result.nextPageToken) {
+      return get_all_shortcuts(existing_tags,result.nextPageToken).then( dat => result.files.concat( dat ) );
+    }
+    return result.files.map( ({parents,shortcutDetails,id}) => {
+      parents = parents.map( id => existing_tags.filter( tag => tag.id == id )[0] );
+      let targetId = shortcutDetails.targetId;
+      return {parents,targetId,id};
+    });
+  });
+};
+
+let get_shortcuts_for_file = (fileId,roots=[PDF_ROOT]) => {
+  const service = google.drive('v3');
+
+  let root_ids = service.files.get({
+    fileId: fileId,
+    fields: 'parents'
+  }).then( resp => {
+    return resp.data.parents;
+  }).then( parents => {
+    return roots.filter( root => parents.indexOf(root) >= 0 );
+  });
+
+  let used_root;
+
+  return root_ids.then( ([root,]) => {
+    used_root = root;
+    return get_existing_tags(root)
+  })
+  .then( get_all_shortcuts )
+  .then( (shortcuts) => {
+    let shortcut_map = new Map();
+    for (let {parents,targetId,id} of shortcuts) {
+      if ( ! shortcut_map.get(targetId)) {
+        shortcut_map.set(targetId,new Set());
+      }
+      for (let parent of parents) {
+        shortcut_map.get(targetId).add({tag: parent, id });  
+      }
+    }
+    return [{ root: used_root, shortcuts: shortcut_map.get(fileId) }];
+  });
+};
+
 let get_tags_for_file = (fileId,roots=[PDF_ROOT]) => {
   const service = google.drive('v3');
-  // FIXME - Get shortcuts to file, and then get parents
-  //         for each of the shortcuts
   return service.files.get({
     fileId: fileId,
     fields: 'parents'
@@ -81,6 +132,69 @@ let get_tags_for_file = (fileId,roots=[PDF_ROOT]) => {
   });
 };
 
+let create_shortcut_for_file = (fileId,tagid) => {
+  const service = google.drive('v3');
+  let shortcutMetadata = {
+    'mimeType': 'application/vnd.google-apps.shortcut',
+    'parents' : [tagid],
+    'shortcutDetails': {
+      'targetId': fileId
+    }
+  };
+  return service.files.create({
+    'resource': shortcutMetadata,
+    'fields': 'id,name,mimeType,shortcutDetails'
+  });
+
+};
+
+let remove_shortcut = (shortcut) => {
+  const service = google.drive('v3');
+  return service.files.delete({
+    'fileId': shortcut.id
+  });
+};
+
+let set_shortcuts_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
+  const service = google.drive('v3');
+
+  if (! roots ) {
+    return get_shared_folders().then( valid_roots => { return set_shortcuts_for_file(fileId,tags,empty,roots=Object.keys(valid_roots)) });
+  }
+
+  if (tags.length == 0) {
+    tags = [].concat(empty);
+  }
+
+  console.log('Getting tags for file ',fileId,'roots ',roots);
+  return get_shortcuts_for_file(fileId,roots).then( root_tagset => {
+    return Promise.all( root_tagset.map( root_tag => {
+      let current_tags = [...root_tag.shortcuts].map( shortcut => shortcut.tag );
+      let current_shortcuts = [...root_tag.shortcuts];
+      let root = root_tag.root;
+      console.log('Current tags are',current_tags.map( tag => tag.name ),'in root',root);
+      return ensure_tagset(tags,root).then( all_tags => {
+        console.log('After ensuring tagset, relevant tags are',all_tags);
+        let curr_ids = current_tags.map( t => t.id );
+        let wanted_tags = all_tags.map( t => t.id );
+        let to_add =  wanted_tags.filter( t => curr_ids.indexOf(t) < 0 );
+        let to_remove = curr_ids.filter( t => wanted_tags.indexOf(t) < 0 ).map( id => current_shortcuts.filter( shortcut => shortcut.tag.id == id )[0] );
+        if (to_add.length == 0 && to_remove.length == 0) {
+          console.log('Not moving anything');
+          return Promise.resolve();
+        }
+        console.log('Moving file');
+        console.log('To add:',to_add);
+        console.log('To remove:',to_remove);
+        return Promise.all([
+          ...to_add.map( id => create_shortcut_for_file( fileId, id )),
+          ...to_remove.map( shortcut => remove_shortcut(shortcut) )
+        ])
+      });
+    }));
+
+  });
+};
 
 let set_tags_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
   const service = google.drive('v3');
@@ -110,8 +224,6 @@ let set_tags_for_file = (fileId,tags,empty=['inbox'],roots=null) => {
           return Promise.resolve();
         }
         console.log('Moving file');
-        // FIXME - Add shortcut in parent if shortcut does not exist
-        //         Remove shortcuts from parent in to_remove
         return service.files.update({
           fileId: fileId,
           addParents: to_add,
@@ -308,9 +420,13 @@ let get_shared_folders = () => {
     fields: 'files(name,id,sharingUser/emailAddress)'
   })
   .then( resp => resp.data )
-  .then( results => results.files.map( dir => {
-    return { name: dir.name, id: dir.id, user: dir.sharingUser.emailAddress };
-  }))
+  .then( results => {
+    return results.files
+    .filter( dir => dir.sharingUser )
+    .map( dir => {
+      return { name: dir.name, id: dir.id, user: dir.sharingUser.emailAddress };
+    })
+  })
   .then( dirs => dirs.filter( dir => VALID_USERS.indexOf(dir.user.toLowerCase()) >= 0 ))
   .then( dirs => {
     let result = {};
@@ -389,7 +505,7 @@ var downloadFileIfNecessary = function downloadFileIfNecessary(file) {
 };
 
 var setTagsForFileId = function setTagsForFileId(fileId,tags) {
-  return getServiceAuth().then( () => { return set_tags_for_file(fileId,tags); });
+  return getServiceAuth().then( () => { return set_shortcuts_for_file(fileId,tags); });
 };
 
 var getServiceAuth = function getServiceAuth() {

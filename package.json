@@ -11,7 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "googleapis": "^31.0.2",
-    "lambda-helpers" : "hirenj/lambda-helpers"
+    "lambda-helpers": "hirenj/lambda-helpers"
   },
   "bundledDependencies": [
     "googleapis",
