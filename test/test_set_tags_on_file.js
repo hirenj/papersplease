@@ -10,9 +10,9 @@ let fail = (err) => {
   console.error(err);
 }
 
-let key = 'google-1O-h_8rvRo6VgAcgCE9fu1Zxj34_e_Cvw'
+let key = 'google-1IJY8EIOC2DGBNtLkYOQX1i6xlxmMCZQJ'
 
-let stamps = ['foo','taga'].map( text => { return { text } });
+let stamps = [].map( text => { return { text } });
 
 let extracted = { stamps };
 

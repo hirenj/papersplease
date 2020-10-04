@@ -10,6 +10,8 @@ var bucket_name = 'test-gator';
 
 const PDF_ROOT = 'root';
 
+const SYSFOLDER_ROOT = 'sysfolder';
+
 const SYSTEM_FOLDERS = {
   'original' : 'All documents',
   'alphabetical' : 'Author'
@@ -56,7 +58,7 @@ let get_existing_tags = async (root=PDF_ROOT) => {
   for (const system_folder of root_folders.map( is_system_folder ).filter( folder => folder )) {
     let system_tags = await get_folders_in(system_folder.id);
     system_tags.forEach( child => {
-      child.name =  `sysfolder/${system_folder.system}/${child.name}`;
+      child.name =  `${SYSFOLDER_ROOT}/${system_folder.system}/${child.name}`;
     });
     all_system_tags = all_system_tags.concat( system_tags );
   }
@@ -72,7 +74,7 @@ const is_system_folder = (folder) => {
 };
 
 const create_tag_folder = (root=PDF_ROOT,tag,system_folders={}) => {
-  if (tag.indexOf('sysfolder') == 0) {
+  if (tag.indexOf(SYSFOLDER_ROOT) == 0) {
     let [,sysid,syschild] = tag.split('/');
     root = system_folders[sysid].id;
     tag = syschild;
@@ -98,6 +100,19 @@ let ensure_tagset = async (tags,root=PDF_ROOT) => {
   }));
 };
 
+const get_system_folders = async (root=PDF_ROOT) => {
+  let folders = await get_existing_root_folders(root);
+  let current_folders = {};
+  for (const [system_key, foldername] of Object.entries(SYSTEM_FOLDERS)) {
+    let existing_folders = folders.filter( folder => folder.name == foldername );
+    if (existing_folders.length > 0) {
+      current_folders[system_key] = existing_folders[0];
+      continue;
+    }
+  }
+  return current_folders;
+};
+
 const ensure_system_folders = async (root=PDF_ROOT) => {
   let folders = await get_existing_root_folders(root);
   let current_folders = {};
@@ -110,9 +125,8 @@ const ensure_system_folders = async (root=PDF_ROOT) => {
     let new_folder_id = await create_folder(root.root, foldername);
     current_folders[system_key] = {id: new_folder_id, name: foldername };
   }
-  console.log(current_folders);
   return current_folders;
-}
+};
 
 
 let get_all_shortcuts = (existing_tags=[],pageToken) => {
@@ -146,24 +160,17 @@ let get_name_for_file = (fileId) => {
   });  
 };
 
-let get_shortcuts_for_file = (fileId,roots=[PDF_ROOT]) => {
+let get_shortcuts_for_file = async (fileId,roots=[PDF_ROOT]) => {
   const service = google.drive('v3');
+  let root_ids = await find_roots_for_file(fileId,roots);
 
-  let root_ids = service.files.get({
-    fileId: fileId,
-    fields: 'parents'
-  }).then( resp => {
-    return resp.data.parents;
-  }).then( parents => {
-    return roots.filter( root => parents.indexOf(root) >= 0 );
-  });
+  let root = root_ids[0];
 
-  let used_root;
+  if ( ! root ) {
+    throw new Error('Cant find root for file');
+  }
 
-  return root_ids.then( ([root,]) => {
-    used_root = root;
-    return get_existing_tags(root)
-  })
+  return get_existing_tags(root)
   .then( get_all_shortcuts )
   .then( (shortcuts) => {
     let shortcut_map = new Map();
@@ -175,27 +182,54 @@ let get_shortcuts_for_file = (fileId,roots=[PDF_ROOT]) => {
         shortcut_map.get(targetId).add({tag: parent, id });  
       }
     }
-    return [{ root: used_root, shortcuts: shortcut_map.get(fileId) }];
+    if ( ! shortcut_map.get(fileId)) {
+      shortcut_map.set(fileId,new Set());
+    }
+    return [{ root: root, shortcuts: shortcut_map.get(fileId) }];
   });
 };
 
-let get_tags_for_file = (fileId,roots=[PDF_ROOT]) => {
+let possible_parent_folders = async (roots) => {
+  let originals = await get_originals_folders(roots);
+  return roots.map( (rootid,idx) => {
+    let original = originals[idx];
+    return {rootid, original};
+  });
+};
+
+let find_roots_for_file = async (fileId,roots) => {
   const service = google.drive('v3');
-  return service.files.get({
-    fileId: fileId,
+
+  let possible_parents = await possible_parent_folders(roots);
+
+  let parents = await service.files.get({
+    fileId,
     fields: 'parents'
   }).then( resp => {
     return resp.data.parents;
-  }).then( parents => {
-    let results = [];
-    let curr_roots = roots.filter( root => parents.indexOf(root) >= 0 );
-    return Promise.all( curr_roots.map( root => {
-      return get_existing_tags(root).then( tags => {
-        let ids = tags.map( t => t.id );
-        return { root: root, tags: parents.map( par => tags[ ids.indexOf( par ) ]).filter( t => t ) };
-      });
-    }) );
   });
+  let result = [];
+  for (let parent of parents) {
+    let matching_parent = possible_parents.filter( rootinfo => {
+      let {rootid,original} = rootinfo;
+      return (rootid == parent || original == parent)
+    });
+    if (matching_parent.length > 0) {
+      result = result.concat(matching_parent);
+    }
+  }
+  return result.filter((o,i,a) => a.indexOf(o) == i).map( root => root.rootid );
+};
+
+let get_tags_for_file = async (fileId,roots=[PDF_ROOT]) => {
+  let results = [];
+  let curr_roots = await find_roots_for_file(fileId,roots);
+  return Promise.all( curr_roots.map( root => {
+    return get_existing_tags(root).then( tags => {
+      let ids = tags.map( t => t.id );
+      return { root: root, tags: parents.map( par => tags[ ids.indexOf( par ) ]).filter( t => t ) };
+    });
+  }) );
 };
 
 let create_shortcut_for_file = (fileId,tagid) => {
@@ -221,6 +255,30 @@ let remove_shortcut = (shortcut) => {
   });
 };
 
+const ensure_parent_for_file = async ( fileId,root=PDF_ROOT ) => {
+  const service = google.drive('v3');
+  let system_folders = await ensure_system_folders(root);
+  console.log(system_folders);
+  let original_folder = system_folders.original.id;
+  let fileinfo = await service.files.get({fileId, fields: 'parents,capabilities'}).then( res => res.data );
+  if ( ! fileinfo.capabilities.canMoveItemWithinDrive) {
+    console.log('No permissions to set parent for this file');
+    return;
+  }
+  if  (fileinfo.parents.indexOf(original_folder) >= 0) {
+    return;
+  }
+  console.log('Moving',fileId,'to originals folder');
+  let to_remove = fileinfo.parents.filter( folder => folder != original_folder ).join(',');
+  let to_add = original_folder;
+  return service.files.update({
+    fileId,
+    enforceSingleParent: true,
+    addParents: to_add,
+    removeParents: to_remove
+  });
+};
+
 let set_shortcuts_for_file = async (fileId,tags,empty=['inbox'],roots=null) => {
   const service = google.drive('v3');
 
@@ -234,15 +292,19 @@ let set_shortcuts_for_file = async (fileId,tags,empty=['inbox'],roots=null) => {
 
   let filename = await get_name_for_file(fileId);
   let filename_idx = filename.toLowerCase().substring(0,2) || "xx";
-  tags = tags.filter( tag => tag.indexOf('sysfolder/alphabetical') < 0 ).concat( `sysfolder/alphabetical/${filename_idx}`)
+  const alphabetical_tag_prefix = `${SYSFOLDER_ROOT}/alphabetical`;
+  tags = tags.filter( tag => tag.indexOf(alphabetical_tag_prefix) < 0 ).concat( `${alphabetical_tag_prefix}/${filename_idx}`)
 
   console.log('Getting tags for file ',fileId,'roots ',roots);
   let root_tagset = await get_shortcuts_for_file(fileId,roots);
-
+  console.log(root_tagset);
   return Promise.all( root_tagset.map( async root_tag => {
+    console.log(root_tag);
     let current_tags = [...root_tag.shortcuts].map( shortcut => shortcut.tag );
     let current_shortcuts = [...root_tag.shortcuts];
     let root = root_tag.root;
+
+    await ensure_parent_for_file(fileId,root);
 
     console.log('Current tags are',current_tags.map( tag => tag.name ),'in root',root);
 
@@ -256,7 +318,7 @@ let set_shortcuts_for_file = async (fileId,tags,empty=['inbox'],roots=null) => {
         console.log('Not moving anything');
         return Promise.resolve();
       }
-      console.log('Moving file');
+      console.log('Moving file shortcuts');
       console.log('To add:',to_add);
       console.log('To remove:',to_remove);
       return Promise.all([
@@ -287,11 +349,6 @@ let set_tags_for_file = async (fileId,tags,empty=['inbox'],roots=null) => {
     let current_tags = root_tag.tags;
     let root = root_tag.root;
     
-    console.log(root,PDF_ROOT);
-    throw new Error('HERE');
-
-    let system_folders = await ensure_system_folders(root);
-
     console.log('Current tags are',current_tags,'in root',root);
     return ensure_tagset(tags,root).then( all_tags => {
       console.log('available tags are',all_tags);
@@ -518,11 +575,27 @@ let get_shared_folders = () => {
 
 };
 
+const get_originals_folders = async (roots) => {
+  return Promise.all( roots.map( async root => {
+    let systems = await get_system_folders(root);
+    if ( ! systems.original ) {
+      return;
+    }
+    return systems.original.id;
+  }));
+};
+
 const get_changed_files = (page_token,files=[],valid_roots=null) => {
   var service = google.drive('v3');
 
   if ( ! valid_roots ) {
-    return get_shared_folders().then( valid_roots => get_changed_files(page_token,files,valid_roots));
+    return get_shared_folders().then( async valid_roots => {
+      let child_system_folders = await get_originals_folders(Object.keys(valid_roots));
+      for (let child_original of child_system_folders.filter( folderid => folderid )) {
+        valid_roots[child_original] = child_original;
+      }
+      return get_changed_files(page_token,files,valid_roots);
+    });
   }
 
   if (page_token == 'none') {
@@ -541,7 +614,7 @@ const get_changed_files = (page_token,files=[],valid_roots=null) => {
       }
       let result = resp.data;
       result.changes = (result.changes || []).filter( file => file.file );
-      console.log("Changes",JSON.stringify(result.changes.map(function(file) {
+      console.log("Raw changes",JSON.stringify(result.changes.map(function(file) {
         return { id: file.fileId, removed: file.removed, name : file.file.name, md5Checksum: file.file.md5Checksum };
       })));
       var current_files = result.changes.filter(function(file) {
