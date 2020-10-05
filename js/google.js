@@ -224,6 +224,12 @@ let find_roots_for_file = async (fileId,roots) => {
 let get_tags_for_file = async (fileId,roots=[PDF_ROOT]) => {
   let results = [];
   let curr_roots = await find_roots_for_file(fileId,roots);
+  let parents = await service.files.get({
+    fileId,
+    fields: 'parents'
+  }).then( resp => {
+    return resp.data.parents;
+  });
   return Promise.all( curr_roots.map( root => {
     return get_existing_tags(root).then( tags => {
       let ids = tags.map( t => t.id );
@@ -687,3 +693,7 @@ exports.downloadFileIfNecessary = downloadFileIfNecessary;
 exports.getChangedFiles = getChangedFiles;
 exports.setTagsForFileId = setTagsForFileId;
 exports.getServiceAuth = getServiceAuth;
+
+exports.get_shared_folders = get_shared_folders;
+exports.get_existing_tags = get_existing_tags;
+exports.set_shortcuts_for_file = set_shortcuts_for_file;
