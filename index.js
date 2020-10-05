@@ -87,6 +87,10 @@ const get_hook_conf = function() {
 
 
 const runDownloader = function() {
+  if (process.env.DISABLE_QUEUE_PROCESSING !== 'false') {
+    return Promise.resolve();
+  }
+
   const AWS = require('lambda-helpers').AWS;
   const stepfunctions = new AWS.StepFunctions();
 
@@ -110,15 +114,22 @@ const runDownloader = function() {
 };
 
 exports.googleWebhook = function acceptWebhook(event,context) {
-  new Promise( resolve => {
-    exports.queueDownloads({},{ succeed: resolve });
-  })
-  .then( (res) => {
-    if (res && res.count > 0) {
-      return runDownloader();
-    }
-  })
-  .then( () => context.succeed({
+  let action_promise = Promise.resolve();
+
+  if (process.env.DISABLE_WEBHOOK_ACTION === 'false') {
+    action_promise = new Promise( resolve => {
+      exports.queueDownloads({},{ succeed: resolve });
+    })
+    .then( (res) => {
+      if (process.env.DISABLE_QUEUE_PROCESSING === 'false') {
+        if (res && res.count > 0) {
+          return runDownloader();
+        }
+      }
+    });
+  }
+
+  action_promise.then( () => context.succeed({
         isBase64Encoded: false,
         statusCode: 200,
         headers : {},

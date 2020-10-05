@@ -29,6 +29,16 @@
       "Type": "String",
       "Default": "https://papersplease-api.glycocode.com/api",
       "Description": "HOSTNAME base for api"
+    },
+    "DISABLEWEBHOOKACTION" : {
+      "Type": "String",
+      "Default": "false",
+      "Description": "Disable any processing when webhook is run"
+    },
+    "DISABLEQUEUEPROCESSING" : {
+      "Type" : "String",
+      "Default" : "false",
+      "Description" : "Disable processing events from the queue"
     }
   },
   "Resources": {
@@ -742,6 +752,12 @@
             },
             "GOOGLE_REFRESH_TOKEN": {
               "Ref": "GOOGLEREFRESHTOKEN"
+            },
+            "DISABLE_WEBHOOK_ACTION" : {
+              "Ref": "DISABLEWEBHOOKACTION"
+            },
+            "DISABLE_QUEUE_PROCESSING" : {
+              "Ref": "DISABLEQUEUEPROCESSING"
             }
           }
         },
