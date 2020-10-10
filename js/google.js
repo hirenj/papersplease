@@ -122,7 +122,7 @@ const ensure_system_folders = async (root=PDF_ROOT) => {
       current_folders[system_key] = existing_folders[0];
       continue;
     }
-    let new_folder_id = await create_folder(root.root, foldername);
+    let new_folder_id = await create_folder(root, foldername);
     current_folders[system_key] = {id: new_folder_id, name: foldername };
   }
   return current_folders;
