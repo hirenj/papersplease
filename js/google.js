@@ -313,7 +313,7 @@ let set_shortcuts_for_file = async (fileId,tags,empty=['inbox'],roots=null) => {
     await ensure_parent_for_file(fileId,root);
 
     console.log('Current tags are',current_tags.map( tag => tag.name ),'in root',root);
-
+    tags = tags.flat();
     return ensure_tagset(tags,root).then( all_tags => {
       console.log('After ensuring tagset, relevant tags are',all_tags);
       let curr_ids = current_tags.map( t => t.id );

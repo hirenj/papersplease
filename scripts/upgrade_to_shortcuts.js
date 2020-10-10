@@ -71,7 +71,7 @@ helper.getServiceAuth().then( async () => {
         return matching_tags.map( tag => tag.name );
       }
     }).filter(tag => tag).filter( tag => (tag !== 'inbox') && (tag.indexOf('sysvol') < 0 ));
-    console.log('Wanted tags for',pdf.name,wanted_tags);
+    console.log([pdf.name,wanted_tags.join(',')].join('\t'));
     if (DO_MODIFICATION) {
       await helper.set_shortcuts_for_file(pdf.id,wanted_tags,['inbox'],[wanted_folder_id]);
     }
