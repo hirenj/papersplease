@@ -63,7 +63,9 @@ helper.getServiceAuth().then( async () => {
 
   console.log(all_pdfs.length,'PDF files to process');
 
-  for (let pdf of all_pdfs) {
+  while (all_pdfs.length > 0) {
+    console.log(all_pdfs.length,'remaining');
+    let pdf = all_pdfs.shift();
     let parents = await list_parents(pdf.id);
     let wanted_tags = parents.map( parid => {
       let matching_tags = tags.filter( tag => tag.id === parid );

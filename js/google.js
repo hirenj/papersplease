@@ -87,7 +87,7 @@ let ensure_tagset = async (tags,root=PDF_ROOT) => {
   let system_folders = await ensure_system_folders(root);
   let existing_tags = await get_existing_tags(root);
   let existing = existing_tags.map( tag => tag.name.toLowerCase() );
-  console.log('Ensuring tags - existing tags for root',root,existing);
+  console.log('Ensuring tags - existing tags for root',root,existing.length);
   return Promise.all( tags.map( tag => {
     let lc_tag = tag.toLowerCase();
     if (existing.indexOf(lc_tag) >= 0) {
@@ -129,7 +129,29 @@ const ensure_system_folders = async (root=PDF_ROOT) => {
 };
 
 
-let get_all_shortcuts = (existing_tags=[],pageToken) => {
+function chunk (arr, len) {
+
+  var chunks = [],
+      i = 0,
+      n = arr.length;
+
+  while (i < n) {
+    chunks.push(arr.slice(i, i += len));
+  }
+
+  return chunks;
+}
+
+let get_all_shortcuts = async (existing_tags=[],pageToken) => {
+  const CHUNK_SIZE=20;
+  if (existing_tags.length > CHUNK_SIZE) {
+    let chunked_tags = [];
+    let chunks = chunk(existing_tags,CHUNK_SIZE);
+    for (let chunk of chunks) {
+      chunked_tags = chunked_tags.concat( await get_all_shortcuts(chunk,pageToken) );
+    }
+    return chunked_tags.flat();
+  }
   let parent_query = existing_tags.map( tag => `'${tag.id}' in parents` ).join(' or ');
   const service = google.drive('v3');
   return service.files.list({
@@ -160,6 +182,22 @@ let get_name_for_file = (fileId) => {
   });  
 };
 
+let match_filenames = (filename,tags) => {
+  let filename_idx = filename.toLowerCase().substring(0,2) || "xx";
+
+  return tags.filter( ({id,name}) => {
+    if (name.indexOf(SYSFOLDER_ROOT) < 0) {
+      return true;
+    }
+    if (name.indexOf(`${SYSFOLDER_ROOT}/alphabetical`) < 0) {
+      return true;
+    }
+    if (name == `${SYSFOLDER_ROOT}/alphabetical/${filename_idx}`) {
+      return true;
+    }
+  });
+}
+
 let get_shortcuts_for_file = async (fileId,roots=[PDF_ROOT]) => {
   const service = google.drive('v3');
   let root_ids = await find_roots_for_file(fileId,roots);
@@ -170,7 +208,10 @@ let get_shortcuts_for_file = async (fileId,roots=[PDF_ROOT]) => {
     throw new Error('Cant find root for file');
   }
 
+  let filename = await get_name_for_file(fileId);
+
   return get_existing_tags(root)
+  .then( match_filenames.bind(null,filename) )
   .then( get_all_shortcuts )
   .then( (shortcuts) => {
     let shortcut_map = new Map();
@@ -697,3 +738,9 @@ exports.getServiceAuth = getServiceAuth;
 exports.get_shared_folders = get_shared_folders;
 exports.get_existing_tags = get_existing_tags;
 exports.set_shortcuts_for_file = set_shortcuts_for_file;
+
+exports.ensure_tagset = ensure_tagset;
+exports.get_system_folders = get_system_folders;
+exports.ensure_parent_for_file = ensure_parent_for_file;
+exports.create_shortcut_for_file = create_shortcut_for_file;
+
