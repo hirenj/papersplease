@@ -23,3 +23,9 @@ bot-user, and then update the ```VALID_USERS``` parameter in the
 cloudformation template. Ordering is important here, as you need to "restart"
 the application whenever the set of shared folders changes (which you can also
 do by making sure there are no running lambdas).
+
+
+## lambda-pdftagger
+
+We also need to install lambda-pdftagger
+
