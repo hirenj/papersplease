@@ -160,14 +160,16 @@ let get_all_shortcuts = async (existing_tags=[],pageToken) => {
     pageToken: pageToken
   }).then( resp => {
     let result = resp.data;
-    if (result.nextPageToken) {
-      return get_all_shortcuts(existing_tags,result.nextPageToken).then( dat => result.files.concat( dat ) );
-    }
-    return result.files.map( ({parents,shortcutDetails,id}) => {
+    let target_files = result.files.map( ({parents,shortcutDetails,id}) => {
       parents = parents.map( id => existing_tags.filter( tag => tag.id == id )[0] );
       let targetId = shortcutDetails.targetId;
       return {parents,targetId,id};
     });
+    if (result.nextPageToken) {
+      return get_all_shortcuts(existing_tags,result.nextPageToken).then( dat => target_files.concat( dat ) );
+    } else {
+      return target_files;
+    }
   });
 };
 
